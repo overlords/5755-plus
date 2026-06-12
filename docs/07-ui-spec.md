@@ -391,14 +391,14 @@ smallText 行距 +2dp;hint 行距 +3dp。粗体使用 `Typeface.DEFAULT` + `Type
 - 非模态层。圆形 **54×54dp**,贴屏幕右侧,距顶 **138dp**、距右 **24dp**。
 - 样式:TextView 文字 `账` 15sp 粗体白色居中;底 `#D62A303E`(深蓝灰 84% 不透明)全圆角 + `#2EFFFFFF` 2dp 描边;elevation 8。
 - 点击 → 打开用户中心抽屉(悬浮球保留显示)。
-- 旧实现固定位置不可拖动;参考文档建议二期支持"隐藏到边缘",当前版本不要求。
+- 旧实现固定位置不可拖动;参考文档建议未来支持"隐藏到边缘",当前版本不要求。
 
 ### 11.2 用户中心抽屉(openUserCenter)
 
 - **容器**:左侧全高抽屉(`Gravity.LEFT`),宽 `min(屏宽, max(520dp, 屏宽×0.58))`,底色 `DRAWER_BG #F5F6F8`,elevation 12;层非模态(右侧游戏区域可操作)。**竖屏下宽度上限 80% 屏宽(§1.12)**——任何方向都必须保留右侧游戏可见条,不得全屏遮挡。
 - **关闭按钮**:`×` 26sp、色 `#747880`,44×44dp,抽屉右上角(距顶 6dp、距右 8dp)→ `onClosed("user_center")` + 关闭层(含悬浮球;游戏侧可再调 showFloatBall)。
 - **WebView**(铺满抽屉):系统 WebView;`javaScriptEnabled=true`、`javaScriptCanOpenWindowsAutomatically=false`、`allowFileAccess=false`、`allowFileAccessFromFileURLs=false`、`allowUniversalAccessFromFileURLs=false`;`overScrollMode=NEVER`;JS 桥名 **`UserCenter`**。
-  - `loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)`——**空 baseURL(不可信 origin)**,不得伪造平台域名;平台真实用户中心 H5 属二期,接入后改为加载真实 URL。
+  - `loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)`——**空 baseURL(不可信 origin)**,不得伪造平台域名;平台真实用户中心 H5 属未来范围,接入后改为加载真实 URL。
 - **H5 内容规格**(本地最小容器,内联 HTML/CSS):
   - 字体栈:`-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif`;body 底 `#f5f6f8`、文字 `#25272b`。
   - **Hero 区**:min-height 172px,底色 **`#ffc936`**,padding `28px 64px 24px 28px`;头像 64px 白色圆形(文字 `账`,border 3px rgba(0,0,0,.08));标签 `当前游戏小号 ID`(13px,rgba(0,0,0,.55))+ 小号 ID 加粗 26px;hero 提示(14px,rgba(0,0,0,.62),行高 1.7):`用户中心接收 SDK 当前游戏小号上下文,不维护另一套当前账号。`
