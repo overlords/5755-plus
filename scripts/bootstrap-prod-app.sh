@@ -1,5 +1,6 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # CTID 106 生产应用机一次性 bootstrap(M4-S7/#40),仿 CTID 105 的 OpenRC 形态。
+# POSIX sh(Alpine busybox 无 bash);经 ssh root@106 'sh /tmp/bootstrap-prod-app.sh' 运行。
 # 在 106 上(或经 ssh root@106 'bash -s' 管道)运行一次,把容器从空白带到「可被 deploy.sh prod 接管」。
 #
 # 幂等:重复运行只补齐缺失项。完成后用 scripts/deploy.sh prod 推二进制+重启。
@@ -14,13 +15,13 @@
 # 不在本脚本职责内(以实际拓扑为准,需单独确认):
 #   - 公网边缘 sdk.xingninghuyu.com 的 TLS 终止与反代 → 106:80(对应 dev 的 Debian 边缘机)。
 #   - 本脚本只配 106 本机 nginx :80 → 127.0.0.1:8080,与 105 一致。
-set -euo pipefail
+set -eu
 
 : "${PROD_DATABASE_URL:?必须提供独立生产库 PROD_DATABASE_URL(勿用 dev 的 m5755_v2)}"
 SIGNING_KEY_ID="${SIGNING_KEY_ID:-prod-key-placeholder}"
 SIGNING_KEY_SECRET="${SIGNING_KEY_SECRET:-__PLACEHOLDER_SECRET__}"
 CALLBACK_SECRET="${CALLBACK_SECRET:-__PLACEHOLDER_CALLBACK__}"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="${SCRIPT_DIR:-$(cd "$(dirname "$0")" && pwd)}"
 
 echo "==> 1. 服务账户与目录"
 id m5755 >/dev/null 2>&1 || adduser -D -H -s /sbin/nologin m5755
@@ -50,6 +51,11 @@ rc-update add m5755-server default >/dev/null 2>&1 || true
 echo "==> 4. 本机 nginx :80 → 127.0.0.1:8080"
 apk info -e nginx >/dev/null 2>&1 || apk add --no-cache nginx
 mkdir -p /etc/nginx/http.d
+# 既有占位 default.conf(回 "sdk ready")带 default_server,与我们的冲突,先停用保留备份
+if [ -f /etc/nginx/http.d/default.conf ]; then
+  mv /etc/nginx/http.d/default.conf /etc/nginx/http.d/default.conf.disabled
+  echo "    已停用占位 default.conf -> default.conf.disabled"
+fi
 cat > /etc/nginx/http.d/m5755.conf <<'EOF'
 server {
     listen 80 default_server;
@@ -62,7 +68,7 @@ server {
     }
 }
 EOF
-nginx -t && (rc-service nginx restart || rc-service nginx start)
+nginx -t && (rc-service nginx reload || rc-service nginx restart || rc-service nginx start)
 rc-update add nginx default >/dev/null 2>&1 || true
 
 echo "==> bootstrap 完成。后续:本机执行 scripts/deploy.sh prod 推 production 二进制并启动。"
