@@ -25,6 +25,28 @@ echo "==> [2/4] 构建交付 AAR(dev + prod release)"
 cp "$android/sdk/build/outputs/aar/sdk-dev-release.aar"  "$dist/"
 cp "$android/sdk/build/outputs/aar/sdk-prod-release.aar" "$dist/"
 
+# prod AAR 注入真实签名密钥(从 gitignored scripts/.env.prod-secrets 取;
+# 源码 src/prod/assets 永远保留 __INJECT_ 占位,真值只进 dist/ 产物,不入库)。
+# 与服务端 .env 用【同一对】keyId/secret,HMAC 两端配对。
+if [ -f "$repo_root/scripts/.env.prod-secrets" ]; then
+  set -a; . "$repo_root/scripts/.env.prod-secrets"; set +a
+  tmp=$(mktemp -d); mkdir -p "$tmp/assets"
+  unzip -p "$dist/sdk-prod-release.aar" assets/m5755-sdk-platform.properties > "$tmp/assets/m5755-sdk-platform.properties"
+  sed -i '' \
+    -e "s|^keyId=.*|keyId=${SIGNING_KEY_ID}|" \
+    -e "s|^signatureSecret=.*|signatureSecret=${SIGNING_KEY_SECRET}|" \
+    -e "s|^signatureConfigVersion=.*|signatureConfigVersion=1|" \
+    "$tmp/assets/m5755-sdk-platform.properties"
+  ( cd "$tmp" && zip -q "$dist/sdk-prod-release.aar" assets/m5755-sdk-platform.properties )
+  rm -rf "$tmp"
+  if unzip -p "$dist/sdk-prod-release.aar" assets/m5755-sdk-platform.properties | grep -q "__INJECT_"; then
+    echo "    ✗ prod AAR 仍含 __INJECT_ 占位,注入失败"; exit 1
+  fi
+  echo "    prod AAR 已注入真实 keyId=${SIGNING_KEY_ID}(与服务端配对)"
+else
+  echo "    ⚠ 无 scripts/.env.prod-secrets:prod AAR 保留 __INJECT_ 占位,不可用于真实签名"
+fi
+
 echo "==> [3/4] 构建 production 服务端二进制(-tags production)"
 ( cd "$repo_root/server" && CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -tags production -o "$dist/m5755-server-prod" ./cmd/server )
