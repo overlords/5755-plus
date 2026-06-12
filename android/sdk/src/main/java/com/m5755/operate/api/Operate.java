@@ -52,6 +52,11 @@ public final class Operate {
 
     /** 以注入配置启动(测试/本地可指向 http://10.0.2.2:PORT 的本地服务端)。 */
     public void start(final Activity activity, final String gameId, final PlatformConfig config) {
+        // 诊断快照(08 §2.2 验收口径):tag M5755Sdk;只输出非密字段,不输出令牌/验证码。
+        android.util.Log.i("M5755Sdk", "init platformEnv=" + config.platformEnv
+                + " baseHost=" + config.baseUrl.replaceFirst("^https?://", "")
+                + " gameId=" + gameId
+                + " artifactType=" + config.artifactType);
         PlatformGateway gateway = new HttpPlatformGateway(config);
         Storage storage = new SharedPrefsStorage(activity);
         this.ui = new SdkUi(activity, background);

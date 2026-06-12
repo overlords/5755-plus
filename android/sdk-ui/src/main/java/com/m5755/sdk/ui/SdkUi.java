@@ -127,6 +127,9 @@ public final class SdkUi implements FlowUi {
 
     @Override
     public void onLoginSuccess(final Results.Login result) {
+        // 登录链路诊断(08 §2.2):只输出 ID 类非密字段,不输出令牌。
+        android.util.Log.i("M5755Sdk", "login_5755_account success platformAccountId="
+                + result.platformAccountId + " isNewGameUser=" + result.isNewGameUser);
         main.post(new Runnable() {
             public void run() {
                 dismiss();
