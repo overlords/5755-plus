@@ -12,6 +12,14 @@ android {
         minSdk 21
     }
 
+    // 交付变体(M4-S2):dev=联调(指向 sdk-dev,公开测试密钥);prod=生产(密钥发布期注入)。
+    // 平台配置随 flavor 资产分流(src/dev/assets、src/prod/assets)。
+    flavorDimensions += "artifact"
+    productFlavors {
+        dev { dimension "artifact" }
+        prod { dimension "artifact" }
+    }
+
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
@@ -29,3 +37,6 @@ dependencies {
 tasks.withType(Test).configureEach {
     systemProperty "M5755_SERVER_URL", System.getProperty("M5755_SERVER_URL", "")
 }
+
+// verifyPublicAarPurity 纯净化门禁(M4-S2/#35)
+apply from: "${rootDir}/purity.gradle"

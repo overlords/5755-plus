@@ -1,0 +1,236 @@
+// verifyPublicAarPurity:公开交付 AAR 纯净化门禁(02 术语;M4-S2/#35)。
+// 双层口径:服务端 dev 能力由 build tag 结构性排除(不在此扫);本文件扫 AAR 产物五维:
+//   ① 命名:classes.jar 无 test/fake/mock/fixture/demo/sample 等类名
+//   ② 依赖:release 运行时闭包零黑名单(01 §4.1)
+//   ③ Manifest:仅白名单权限,无 Provider/Service/Receiver/queries
+//   ④ properties:产物标识齐全;production 变体 host 非 dev/local 且 platformEnv=prod
+//   ⑤ 禁词:production AAR 的类常量池/资产无 dev 主机名与公开测试密钥
+// 校验逻辑写成 ext 函数,verifyPublicAarPurity(真实 prodRelease)与 verifyPurityGateMetaTest
+// (合成毒样本)共用同一实现,确保元测试覆盖的是上线门禁的真实代码路径。
+
+import java.util.zip.ZipFile
+import java.util.zip.ZipEntry
+import java.util.zip.ZipInputStream
+import java.util.zip.ZipOutputStream
+
+ext.purityNamingForbidden = ['test', 'fake', 'mock', 'fixture', 'demo', 'sample', 'espresso', 'junit', 'idlingresource']
+ext.purityDepBlacklist    = ['androidx.', 'android.support', 'com.android.support', 'kotlin-stdlib', 'org.jetbrains.kotlin', 'okhttp', 'okio', 'com.google.gson', 'com.squareup', 'retrofit']
+ext.purityForbiddenWords  = ['sdk-dev.xingninghuyu.com', 'm5755-dev-public-test-secret', 'm5755-dev-callback-secret', 'dev-test-key', 'Test1234', '10.0.2.2']
+ext.purityPermWhitelist   = ['android.permission.INTERNET', 'android.permission.ACCESS_NETWORK_STATE']
+ext.purityPropsAsset      = 'assets/m5755-sdk-platform.properties'
+
+// ---- AAR 读取工具 ----
+
+ext.aarClassNames = { File aar ->
+    def out = []
+    def zf = new ZipFile(aar)
+    try {
+        def cj = zf.getEntry('classes.jar')
+        if (cj != null) {
+            def zis = new ZipInputStream(zf.getInputStream(cj))
+            def e
+            while ((e = zis.nextEntry) != null) {
+                if (e.name.endsWith('.class')) out << e.name
+            }
+            zis.close()
+        }
+    } finally {
+        zf.close()
+    }
+    out
+}
+
+ext.aarEntryText = { File aar, String name ->
+    def zf = new ZipFile(aar)
+    try {
+        def e = zf.getEntry(name)
+        return e == null ? null : new String(zf.getInputStream(e).readAllBytes(), 'UTF-8')
+    } finally {
+        zf.close()
+    }
+}
+
+// 扫描 AAR 全部条目(含 classes.jar 内每个 .class 的常量池字节)寻找禁词。
+ext.aarTextHits = { File aar, List words ->
+    def hits = []
+    def zf = new ZipFile(aar)
+    try {
+        def en = zf.entries()
+        while (en.hasMoreElements()) {
+            def e = en.nextElement()
+            if (e.directory) continue
+            if (e.name == 'classes.jar') {
+                def zis = new ZipInputStream(zf.getInputStream(e))
+                def ce
+                while ((ce = zis.nextEntry) != null) {
+                    def s = new String(zis.readAllBytes(), 'ISO-8859-1')
+                    words.each { w -> if (s.contains(w)) hits << "${w} @ class ${ce.name}".toString() }
+                }
+                zis.close()
+            } else {
+                def s = new String(zf.getInputStream(e).readAllBytes(), 'ISO-8859-1')
+                words.each { w -> if (s.contains(w)) hits << "${w} @ ${e.name}".toString() }
+            }
+        }
+    } finally {
+        zf.close()
+    }
+    hits.unique()
+}
+
+// ---- 五维收集(① ③ ④ ⑤ 来自 AAR;② 来自依赖配置)----
+
+ext.collectAarViolations = { File aar, boolean isProd ->
+    def v = []
+
+    // ① 命名
+    aarClassNames(aar).each { cn ->
+        def low = cn.toLowerCase()
+        def bad = purityNamingForbidden.find { low.contains(it) }
+        if (bad != null) v << "命名: 类名含禁词 '${bad}' -> ${cn}".toString()
+    }
+
+    // ③ Manifest
+    def mani = aarEntryText(aar, 'AndroidManifest.xml')
+    if (mani == null) {
+        v << '清单: AndroidManifest.xml 缺失'
+    } else {
+        (mani =~ /<uses-permission[^>]*name="([^"]+)"/).each { all, name ->
+            if (!purityPermWhitelist.contains(name)) v << "清单: 非白名单权限 ${name}".toString()
+        }
+        ['<provider', '<service', '<receiver', '<queries'].each { tag ->
+            if (mani.contains(tag)) v << "清单: 含组件/查询 ${tag}".toString()
+        }
+    }
+
+    // ④ properties
+    def ptext = aarEntryText(aar, purityPropsAsset)
+    if (ptext == null) {
+        v << "配置: 缺资产 ${purityPropsAsset}".toString()
+    } else {
+        def props = new Properties()
+        props.load(new ByteArrayInputStream(ptext.getBytes('UTF-8')))
+        ['artifactType', 'platformEnv', 'baseHost', 'sdkVersion'].each { k ->
+            if (!props.getProperty(k)) v << "配置: 缺键 ${k}".toString()
+        }
+        if (isProd) {
+            def host = props.getProperty('baseHost') ?: ''
+            if (['dev', 'local', '192.168', '127.0.0.1', '10.0.2.2'].any { host.contains(it) }) {
+                v << "配置: 生产 host 指向 dev/local -> ${host}".toString()
+            }
+            if (props.getProperty('platformEnv') != 'prod') {
+                v << "配置: 生产 platformEnv 非 prod".toString()
+            }
+        }
+    }
+
+    // ⑤ 禁词(仅 production:dev 变体合法含 dev 主机)
+    if (isProd) {
+        aarTextHits(aar, purityForbiddenWords).each { v << "禁词: ${it}".toString() }
+    }
+
+    v
+}
+
+// ② 依赖闭包黑名单
+ext.collectDepViolations = { String configName ->
+    def cfg = configurations.findByName(configName)
+    if (cfg == null) return ["依赖: 配置 ${configName} 不存在".toString()]
+    def v = []
+    try {
+        cfg.incoming.artifactView { it.lenient = true }.artifacts.each { a ->
+            def disp = a.id.componentIdentifier.displayName
+            def bad = purityDepBlacklist.find { disp.toLowerCase().contains(it) }
+            if (bad != null) v << "依赖: 黑名单 ${disp} (${bad})".toString()
+        }
+    } catch (Exception ex) {
+        v << "依赖: 解析 ${configName} 失败 ${ex.message}".toString()
+    }
+    v
+}
+
+// ---- 主门禁:真实 prodRelease AAR ----
+
+tasks.register('verifyPublicAarPurity') {
+    group = 'verification'
+    description = '公开交付 AAR 五维纯净化门禁(生产变体,fail-closed)'
+    dependsOn 'assembleProdRelease'
+    doLast {
+        def aar = layout.buildDirectory.file('outputs/aar/sdk-prod-release.aar').get().asFile
+        if (!aar.exists()) throw new GradleException("找不到生产 AAR: ${aar}")
+        def v = collectAarViolations(aar, true) + collectDepViolations('prodReleaseRuntimeClasspath')
+        if (!v.isEmpty()) {
+            throw new GradleException("纯净化门禁失败(${v.size()} 项):\n  - " + v.join('\n  - '))
+        }
+        println "verifyPublicAarPurity OK: ${aar.name} 五维通过(${aarClassNames(aar).size()} 类 / 零黑名单依赖 / 仅白名单权限 / prod 标识 / 无禁词)"
+    }
+}
+
+// ---- 元测试:合成毒样本证明每一维 fail-closed ----
+
+ext.makeSyntheticAar = { File dest, Map opts ->
+    // 内嵌 classes.jar
+    def cjOut = new ByteArrayOutputStream()
+    def cz = new ZipOutputStream(cjOut)
+    (opts.classNames ?: ['com/m5755/operate/api/Operate.class']).each { n ->
+        cz.putNextEntry(new ZipEntry(n))
+        cz.write((opts.classBody ?: '').getBytes('ISO-8859-1'))
+        cz.closeEntry()
+    }
+    cz.close()
+
+    dest.parentFile.mkdirs()
+    def z = new ZipOutputStream(new FileOutputStream(dest))
+
+    def perms = opts.permissions ?: purityPermWhitelist
+    def sb = new StringBuilder('<?xml version="1.0" encoding="utf-8"?>\n')
+    sb.append('<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n')
+    perms.each { sb.append('  <uses-permission android:name="').append(it).append('"/>\n') }
+    if (opts.extraManifest) sb.append(opts.extraManifest).append('\n')
+    sb.append('</manifest>\n')
+    z.putNextEntry(new ZipEntry('AndroidManifest.xml')); z.write(sb.toString().getBytes('UTF-8')); z.closeEntry()
+
+    z.putNextEntry(new ZipEntry('classes.jar')); z.write(cjOut.toByteArray()); z.closeEntry()
+
+    def props = [artifactType: 'production', platformEnv: 'prod', baseHost: 'sdk.xingninghuyu.com', sdkVersion: '2.0.0']
+    if (opts.props) props.putAll(opts.props)
+    def pstr = props.collect { k, val -> "${k}=${val}" }.join('\n') + '\n'
+    z.putNextEntry(new ZipEntry(purityPropsAsset)); z.write(pstr.getBytes('UTF-8')); z.closeEntry()
+
+    (opts.extraAssets ?: [:]).each { name, content ->
+        z.putNextEntry(new ZipEntry('assets/' + name)); z.write(content.getBytes('UTF-8')); z.closeEntry()
+    }
+    z.close()
+}
+
+tasks.register('verifyPurityGateMetaTest') {
+    group = 'verification'
+    description = '元测试:证明纯净化门禁对各维违规 fail-closed(否则门禁形同虚设)'
+    doLast {
+        def dir = layout.buildDirectory.dir('purity-metatest').get().asFile
+        def fails = []
+        def expectClean = { String name, Map opts ->
+            def f = new File(dir, name + '.aar'); makeSyntheticAar(f, opts)
+            def v = collectAarViolations(f, true)
+            if (!v.isEmpty()) fails << "干净样本 ${name} 误报: ${v}".toString()
+            else println "  干净样本 ${name} 放行 ✓"
+        }
+        def expectReject = { String name, Map opts ->
+            def f = new File(dir, name + '.aar'); makeSyntheticAar(f, opts)
+            def v = collectAarViolations(f, true)
+            if (v.isEmpty()) fails << "毒样本 ${name} 未被拦截(门禁 fail-open!)".toString()
+            else println "  毒样本 ${name} 已拦截: ${v[0]}"
+        }
+
+        expectClean('clean', [:])
+        expectReject('naming', [classNames: ['com/m5755/operate/api/Operate.class', 'com/m5755/operate/FakeGateway.class']])
+        expectReject('word', [extraAssets: ['leak.txt': 'secret=m5755-dev-public-test-secret-v1']])
+        expectReject('devhost', [props: [baseHost: 'sdk-dev.xingninghuyu.com']])
+        expectReject('envdev', [props: [platformEnv: 'dev']])
+        expectReject('perm', [permissions: purityPermWhitelist + ['android.permission.READ_SMS']])
+        expectReject('component', [extraManifest: '  <application><service android:name=".Leak"/></application>'])
+
+        if (!fails.isEmpty()) throw new GradleException("元测试失败:\n  - " + fails.join('\n  - '))
+        println "verifyPurityGateMetaTest OK: 干净样本放行 + 6 类违规全部 fail-closed"
+    }
+}

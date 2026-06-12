@@ -13,6 +13,8 @@ android {
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        // :sdk 现有 artifact 维度(dev/prod);样例/仪器化走 dev 变体(联调口径)
+        missingDimensionStrategy "artifact", "dev"
     }
 
     buildTypes {
