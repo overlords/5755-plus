@@ -1,0 +1,23 @@
+plugins {
+    id "com.android.library"
+}
+
+// 公开交付模块:把 sdk-core 与 sdk-ui 装配为单一交付 AAR(接入方只依赖这一个)。
+android {
+    namespace "com.m5755.operate"
+    compileSdk 36
+
+    defaultConfig {
+        minSdk 21
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
+
+dependencies {
+    api project(":sdk-core")
+    api project(":sdk-ui")
+}
