@@ -37,13 +37,22 @@ type Service struct {
 	store          *store.Store
 	now            func() time.Time
 	callbackSecret string
+	realNameMock   bool // dev=true(格式校验+mock 通过);prod=false(未配置真实 provider 时 fail-closed)
 }
 
-// callbackSecretDev:dev 充值回调签名密钥(公开测试密钥,生产由发布配置注入)。
-const callbackSecretDev = "m5755-dev-callback-secret-v1"
+// Options 注入生产/联调差异(M4-S3:密钥环境注入,不再源码常量)。
+type Options struct {
+	CallbackSecret string
+	RealNameMock   bool
+}
 
 func New(s *store.Store) *Service {
-	return &Service{store: s, now: time.Now, callbackSecret: callbackSecretDev}
+	// 兼容旧测试入口:dev 公开测试密钥 + mock 实名(联调口径)。
+	return NewWith(s, Options{CallbackSecret: "m5755-dev-callback-secret-v1", RealNameMock: true})
+}
+
+func NewWith(s *store.Store, opt Options) *Service {
+	return &Service{store: s, now: time.Now, callbackSecret: opt.CallbackSecret, realNameMock: opt.RealNameMock}
 }
 
 // CallbackSecret 供测试接收端验证签名。

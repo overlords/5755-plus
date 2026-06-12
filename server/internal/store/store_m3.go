@@ -166,3 +166,18 @@ func (s *Store) EnsureDevPasswordAccount(ctx context.Context, loginAccount, disp
 func (s *Store) ConsumeDeviceCode(ctx context.Context, gameID, loginAccount, code string) (SmsConsume, error) {
 	return s.ConsumeSmsCode(ctx, gameID, loginAccount, code)
 }
+
+// ---------- M4-S3 生产加固 ----------
+
+// UpsertSigningKey 注入(生产)验签密钥。
+func (s *Store) UpsertSigningKey(ctx context.Context, keyID, secret string) error {
+	_, err := s.pool.Exec(ctx, `INSERT INTO signing_keys (key_id, secret, active) VALUES ($1,$2,true)
+		ON CONFLICT (key_id) DO UPDATE SET secret=$2, active=true`, keyID, secret)
+	return err
+}
+
+// DeactivateSigningKey 停用密钥(生产启动时停用 dev 公开测试密钥)。
+func (s *Store) DeactivateSigningKey(ctx context.Context, keyID string) error {
+	_, err := s.pool.Exec(ctx, `UPDATE signing_keys SET active=false WHERE key_id=$1`, keyID)
+	return err
+}

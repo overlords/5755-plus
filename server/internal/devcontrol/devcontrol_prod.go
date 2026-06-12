@@ -17,3 +17,6 @@ func Register(_ *gin.Engine, _ *store.Store, _ *domain.Service, _ gin.HandlerFun
 func FaultMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) { c.Next() }
 }
+
+// RegisterPayPlaceholder 生产构建 no-op:占位支付台路由不存在(探测 404)。
+func RegisterPayPlaceholder(_ *gin.Engine, _ gin.HandlerFunc) {}

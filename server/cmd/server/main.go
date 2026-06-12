@@ -41,17 +41,11 @@ func main() {
 	platformEnv := envOrDefault("PLATFORM_ENV", "dev")
 	log.Printf("迁移已套用,平台环境=%s", platformEnv)
 
-	// dev/联调:预置带密码的测试账户(#25 密码登录回归);生产不种子。
-	if platformEnv != "prod" {
-		if hash, herr := domain.HashPassword("Test1234"); herr == nil {
-			if serr := st.EnsureDevPasswordAccount(ctx, "13900000000", "密码测试账户", hash); serr != nil {
-				log.Printf("dev 密码账户种子失败(忽略): %v", serr)
-			}
-		}
-	}
+	// 构建变体决定 bootstrap:dev=种子+测试密钥;production=fail-closed+密钥注入(M4-S3)。
+	callbackSecret, realNameMock := bootstrapEnv(ctx, st, platformEnv)
 
 	baseURL := envOrDefault("PUBLIC_BASE_URL", "https://sdk-dev.xingninghuyu.com")
-	svc := domain.New(st)
+	svc := domain.NewWith(st, domain.Options{CallbackSecret: callbackSecret, RealNameMock: realNameMock})
 	r := api.NewRouter(svc, st, time.Now, baseURL)
 
 	srv := &http.Server{

@@ -27,8 +27,8 @@ func NewRouter(svc *domain.Service, st *store.Store, now func() time.Time, baseU
 	// 运维面:无签名、只读
 	r.GET("/healthz", func(c *gin.Context) { c.String(200, "m5755 platform server ok") })
 	r.GET("/openapi.json", openAPIHandler)
-	// dev 占位支付台页面(无签名,浏览器加载;生产化里程碑替换/移除)
-	r.GET("/pay/:orderId", payPlaceholderHandler(svc))
+	// dev 占位支付台页面(无签名;production 构建不注册 → 404,M4-S3)
+	devcontrol.RegisterPayPlaceholder(r, payPlaceholderHandler(svc))
 
 	mw := signature.Middleware(st.LookupSigningKey, now)
 
