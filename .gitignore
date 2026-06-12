@@ -1,3 +1,6 @@
 .scratch/
 .DS_Store
 /dist/
+# 部署目标与生产密钥(不入库;显式声明,不依赖全局 gitignore)
+scripts/.env.deploy
+scripts/.env.prod-secrets

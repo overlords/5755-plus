@@ -181,3 +181,10 @@ func (s *Store) DeactivateSigningKey(ctx context.Context, keyID string) error {
 	_, err := s.pool.Exec(ctx, `UPDATE signing_keys SET active=false WHERE key_id=$1`, keyID)
 	return err
 }
+
+// DeactivateOtherSigningKeys 停用除当前生产 keyId 外的所有密钥;
+// 杜绝占位/历史 key(如 dev-test-key、prod-key-placeholder)残留 active 形成后门。
+func (s *Store) DeactivateOtherSigningKeys(ctx context.Context, keepKeyID string) error {
+	_, err := s.pool.Exec(ctx, `UPDATE signing_keys SET active=false WHERE key_id<>$1`, keepKeyID)
+	return err
+}
