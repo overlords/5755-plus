@@ -105,6 +105,11 @@ func peekBodyGameID(c *gin.Context) string {
 	return probe.GameID
 }
 
+// RegisterPayPlaceholder dev 构建注册占位支付台页(生产构建 no-op → 404,M4-S3)。
+func RegisterPayPlaceholder(r *gin.Engine, handler gin.HandlerFunc) {
+	r.GET("/pay/:orderId", handler)
+}
+
 // Register 在 dev/local 构建下注册 /internal/dev-control/*,复用验签中间件。
 func Register(r *gin.Engine, st *store.Store, svc *domain.Service, mw gin.HandlerFunc) {
 	g := r.Group("/internal/dev-control", mw)

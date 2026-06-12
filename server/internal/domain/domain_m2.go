@@ -96,8 +96,13 @@ func (svc *Service) GetRealName(ctx context.Context, gameID, platformAccountID, 
 	return d, nil
 }
 
-// SubmitRealName dev/联调口径:格式校验 + mock 通过(身份证 18 位、出生日期合法);生产须接真实核验(发布门禁)。
+// SubmitRealName dev/联调口径:格式校验 + mock 通过(身份证 18 位、出生日期合法);
+// 生产口径:未配置真实核验 provider 时 fail-closed(D5 发布门禁项,不得以 mock 冒充生产核验)。
 func (svc *Service) SubmitRealName(ctx context.Context, gameID, platformAccountID, platformToken, realName, idNumber string) (*RealNameData, *Fault) {
+	if !svc.realNameMock {
+		// 真实 provider 对接点:厂商接入属平台采购;接口就位前生产明确失败。
+		return nil, fault(503, result.ReasonPlatformUnavailable, "实名核验服务未配置(生产须对接真实核验源)")
+	}
 	if f := svc.requirePlatformSession(ctx, gameID, platformAccountID, platformToken); f != nil {
 		return nil, f
 	}

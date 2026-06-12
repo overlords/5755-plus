@@ -2,13 +2,22 @@ plugins {
     id "com.android.library"
 }
 
-// 公开交付模块:把 sdk-core 与 sdk-ui 装配为单一交付 AAR(接入方只依赖这一个)。
+// 单一公开交付模块(ADR-0006):含核心(com.m5755.operate.core.*)与业务配套 UI
+// (com.m5755.sdk.ui.*)两个逻辑分层;AGP 原生 assembleRelease 即产出单一交付 AAR。
 android {
     namespace "com.m5755.operate"
     compileSdk 36
 
     defaultConfig {
         minSdk 21
+    }
+
+    // 交付变体(M4-S2):dev=联调(指向 sdk-dev,公开测试密钥);prod=生产(密钥发布期注入)。
+    // 平台配置随 flavor 资产分流(src/dev/assets、src/prod/assets)。
+    flavorDimensions += "artifact"
+    productFlavors {
+        dev { dimension "artifact" }
+        prod { dimension "artifact" }
     }
 
     compileOptions {
@@ -18,6 +27,16 @@ android {
 }
 
 dependencies {
-    api project(":sdk-core")
-    api project(":sdk-ui")
+    // 01 依赖白名单:不引入 AndroidX、OkHttp、kotlin-stdlib 等;仅平台能力。
+    // 运行时 org.json 用 Android 内置;JVM 单测需真实 org.json 实现(同 API)。
+    testImplementation "junit:junit:4.13.2"
+    testImplementation "org.json:json:20240303"
 }
+
+// 让 JVM 单测能联到本地真实平台服务端(可选):传 -DM5755_SERVER_URL=http://127.0.0.1:18080
+tasks.withType(Test).configureEach {
+    systemProperty "M5755_SERVER_URL", System.getProperty("M5755_SERVER_URL", "")
+}
+
+// verifyPublicAarPurity 纯净化门禁(M4-S2/#35)
+apply from: "${rootDir}/purity.gradle"
