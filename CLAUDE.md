@@ -12,6 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 文档间存在严格的权威分层,修改时必须维持一致性:
 
+- `docs/00-roadmap.md` — 项目蓝图(里程碑级):双轨总览(主轴 v2 SDK M1–M4✓→GA 受控验收;支轨公会平台)、GA 终点线 6 项、分期词汇唯一口径(「一期/二期」已退役,统一 M1–M5/GA)。**先读这张地图再读规格**;它不是 spec,口径仍以 01–08 为准。
 - `docs/01-product-scope.md` — 产品范围、一期 14 项能力白名单、公开 API 白名单(`com.m5755.operate.api.*`)、依赖/能力/Manifest 排除项。**任何能力进出产物必须先修订本文**,其余文档随之对齐。
 - `docs/02-terminology.md` — 114 条术语 + 6 组易混淆对照,是**全项目文档与代码命名的唯一口径**;其他文档或代码与它冲突时,以它为准修正(除非有意修订术语本身)。
 - `docs/03-entry-account-flow.md` — 主流程状态顺序、各节点阻断/回退规则(含"是否触发账号变化"判定表)、游戏小号体系、登出语义。
