@@ -18,7 +18,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `docs/04-platform-gateway-api.md` — SDK 内部网关与平台服务端的 HTTP JSON 契约 v2:9 条资源式路径(HTTP 方法区分语义)、`ApiResult` + 机器可读 `reason` 枚举(失效分流的唯一依据)、HMAC-SHA256 入站签名、dev 控制面(`/internal/dev-control/*`,异常注入)、充值回调(服务端)、环境矩阵;**这是 SDK 与平台服务端两端的共同验收口径**。
 - `docs/05-payment-role-report.md` — 角色上报、支付流程与 `Order` 语义、客户端支付回调 vs 充值回调责任矩阵。
 - `docs/06-user-center.md` — 悬浮球入口、H5 容器安全边界、JS Bridge 最小契约(仅 `getAccountContext` / `postAccountAction` 两个方法)。
-- `docs/07-ui-spec.md` — 12 个界面的布局/文案/颜色/尺寸规格与通用规范。
+- `docs/07-ui-spec.md` — 12 个界面的布局/文案/颜色/尺寸规格与通用规范。**视觉上游**是 claude.ai 设计系统项目「5755 SDK Design System」(经 DesignSync 工具读取,仓库不存快照);设计产出进实现必须先修订 07,07 仍是实现唯一口径;Android 不内嵌字体(07 §1.11)。
 - `docs/08-acceptance.md` — 验收三面(样例演示 + 诊断快照 + 上线阻断回归)、12 个模拟器验收场景、旧实现已知缺口 B2-B5。
 
 资产:`docs/assets/`(业务流程总图、`acceptance/` 验收截图、`audit-2026-06-12/` 审计证据截图)。
