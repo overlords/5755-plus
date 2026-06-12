@@ -23,6 +23,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 资产:`docs/assets/`(业务流程总图、`acceptance/` 验收截图、`audit-2026-06-12/` 审计证据截图)。
 
+## 仓库目录布局
+
+```
+docs/        # 8 份权威文档 + adr/ + agents/(共享)
+android/     # Android SDK Gradle 工程根:sdk-core / sdk-ui / sdk / sample(AGP 8.13.1,minSdk 21)
+server/      # 平台服务端 Go 工程根(module m5755/server)
+scripts/     # 跨端脚本:部署 sdk-dev、发布门禁探测等
+.scratch/    # 本地工作区,不入库
+```
+
+`server/` 内部:`cmd/server/` 入口 + `internal/{api,signature,devcontrol,domain,store}`,贴 04 契约三个面切包;`devcontrol` 用 Go build tag 实现"生产构建不注册路由"(04 三重生产防护①)。顶层不叫 `sdk/`(避免与 Gradle 模块 `:sdk` 形成 `sdk/sdk/` 路径),服务端目录不叫 `gateway`(术语表禁用)。
+
 ## 贯穿全部文档的核心不变量
 
 编辑任何文档时,以下口径不得被破坏:

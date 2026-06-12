@@ -1,0 +1,19 @@
+[Unit]
+Description=5755 平台服务端(SDK 网关 v2)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# 密钥与连接串放环境文件,不入库;部署时由运维写入 /opt/m5755/.env
+EnvironmentFile=/opt/m5755/.env
+ExecStart=/opt/m5755/current/m5755-server
+Restart=on-failure
+RestartSec=3
+User=m5755
+Group=m5755
+# dev/联调以默认(非 production)构建运行,注册 /internal/dev-control/*;
+# 生产部署须用 -tags production 构建的二进制(/internal/* 路由不存在)。
+
+[Install]
+WantedBy=multi-user.target
