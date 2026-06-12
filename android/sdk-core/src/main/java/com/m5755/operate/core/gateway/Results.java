@@ -101,4 +101,25 @@ public final class Results {
         public String account;
         public String token;
     }
+
+    /** 角色上报结果(#27)。 */
+    public static final class RoleReport {
+        public boolean ok;
+        public String reason;
+        public String message;
+        public boolean reported;
+    }
+
+    /** 支付创建结果(#28)。 */
+    public static final class OrderCreate {
+        public boolean ok;
+        public String reason;
+        public String message;
+        public String platformOrderId;
+        public String paymentUrl;
+        public String account;
+        public String amount;
+        public String commodity;
+        public String serverName;
+    }
 }

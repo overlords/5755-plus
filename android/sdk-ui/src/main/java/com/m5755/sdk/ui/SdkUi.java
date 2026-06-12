@@ -500,6 +500,345 @@ public final class SdkUi implements FlowUi {
         mount(card);
     }
 
+    // ===== 里程碑 3 界面(#26-#28) =====
+
+    @Override
+    public void showRoleResult(final boolean success, final String reason, final java.util.Map<String, String> fields) {
+        main.post(new Runnable() {
+            public void run() {
+                mountRoleResult(success, fields);
+            }
+        });
+    }
+
+    @Override
+    public void showPayDrawer(final java.util.Map<String, String> display, final String paymentUrl) {
+        main.post(new Runnable() {
+            public void run() {
+                mountPayDrawer(display, paymentUrl);
+            }
+        });
+    }
+
+    @Override
+    public void showFloatBall(final String account) {
+        main.post(new Runnable() {
+            public void run() {
+                mountFloatBall(account);
+            }
+        });
+    }
+
+    @Override
+    public void hideFloatBall() {
+        main.post(new Runnable() {
+            public void run() {
+                if (floatBall != null) {
+                    ViewGroup p = (ViewGroup) floatBall.getParent();
+                    if (p != null) {
+                        p.removeView(floatBall);
+                    }
+                    floatBall = null;
+                }
+                dismiss();
+            }
+        });
+    }
+
+    private View floatBall;
+    private String floatAccount;
+
+    private void mountRoleResult(boolean success, java.util.Map<String, String> fields) {
+        LinearLayout card = UiKit.modalCard(host, 420);
+        card.addView(UiKit.title(host, "角色上报"));
+        TextView status = new TextView(host);
+        status.setText(success ? "角色上报成功" : "角色上报失败");
+        status.setTextSize(18);
+        status.setTextColor(UiKit.TEXT);
+        status.getPaint().setFakeBoldText(true);
+        status.setGravity(Gravity.CENTER);
+        status.setBackground(UiKit.rounded(0xFFFFF9DF, UiKit.dp(host, 8)));
+        LinearLayout.LayoutParams stLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 52));
+        stLp.topMargin = UiKit.dp(host, 14);
+        card.addView(status, stLp);
+        StringBuilder sb = new StringBuilder();
+        sb.append("区服:").append(readable(fields.get("serverName"))).append("\n");
+        sb.append("角色:").append(readable(fields.get("roleName"))).append("\n");
+        sb.append("等级:").append(readable(fields.get("roleLevel"))).append("\n");
+        sb.append("战力:").append(readable(fields.get("roleCe"))).append("\n");
+        sb.append("累计充值:").append(readable(fields.get("roleRechargeAmount")));
+        LinearLayout.LayoutParams dLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        dLp.topMargin = UiKit.dp(host, 14);
+        card.addView(UiKit.hint(host, sb.toString()), dLp);
+        TextView ok = UiKit.primaryButton(host, "我知道了");
+        card.addView(ok);
+        ok.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                dismiss();
+            }
+        });
+        mount(card);
+    }
+
+    /** -1 占位渲染为"—"(07 §0.3)。 */
+    private static String readable(String v) {
+        if (v == null || v.isEmpty() || "-1".equals(v)) {
+            return "—";
+        }
+        return v;
+    }
+
+    private void mountPayDrawer(java.util.Map<String, String> display, String paymentUrl) {
+        boolean portrait = host.getResources().getConfiguration().orientation
+                == android.content.res.Configuration.ORIENTATION_PORTRAIT;
+        dismiss();
+        overlay = new FrameLayout(host);
+        overlay.setBackgroundColor(UiKit.MASK);
+        overlay.setClickable(true);
+
+        LinearLayout panel = new LinearLayout(host);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundColor(0xFFF5F5F5);
+        panel.setPadding(UiKit.dp(host, 14), UiKit.dp(host, 10), UiKit.dp(host, 14), UiKit.dp(host, 14));
+
+        FrameLayout.LayoutParams plp;
+        int dm = host.getResources().getDisplayMetrics().widthPixels;
+        int dmh = host.getResources().getDisplayMetrics().heightPixels;
+        if (portrait) {
+            // 竖屏底部抽屉(07 §1.12):≤80% 高、顶圆角、抓手条
+            panel.setBackground(topRounded(0xFFF5F5F5, UiKit.dp(host, 16)));
+            TextView grab = new TextView(host);
+            grab.setBackground(UiKit.rounded(0xFFCFD2D8, UiKit.dp(host, 999)));
+            LinearLayout.LayoutParams glp = new LinearLayout.LayoutParams(UiKit.dp(host, 40), UiKit.dp(host, 4));
+            glp.gravity = Gravity.CENTER_HORIZONTAL;
+            glp.bottomMargin = UiKit.dp(host, 6);
+            panel.addView(grab, glp);
+            plp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (dmh * 0.8));
+            plp.gravity = Gravity.BOTTOM;
+        } else {
+            // 横屏右侧全高抽屉
+            int w = Math.min(dm, Math.max(UiKit.dp(host, 520), dm / 2));
+            plp = new FrameLayout.LayoutParams(w, ViewGroup.LayoutParams.MATCH_PARENT);
+            plp.gravity = Gravity.END;
+        }
+
+        // 头部
+        LinearLayout header = new LinearLayout(host);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        TextView back = new TextView(host);
+        back.setText(portrait ? "⌄" : "‹");
+        back.setTextSize(26);
+        back.setTextColor(UiKit.PRIMARY_DEEP);
+        back.setWidth(UiKit.dp(host, 44));
+        back.setGravity(Gravity.CENTER);
+        header.addView(back);
+        TextView title = new TextView(host);
+        title.setText("5755 游戏支付");
+        title.setTextSize(20);
+        title.setTextColor(0xFF111111);
+        title.setGravity(Gravity.CENTER);
+        header.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        header.addView(new TextView(host), new LinearLayout.LayoutParams(UiKit.dp(host, 44), 1));
+        panel.addView(header, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 48)));
+        back.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                dismiss();
+                restoreFloatBall();
+            }
+        });
+
+        // 订单卡(逐字段取自入参)
+        android.widget.ScrollView scroll = new android.widget.ScrollView(host);
+        LinearLayout card = new LinearLayout(host);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackground(UiKit.rounded(UiKit.WHITE, UiKit.dp(host, 14)));
+        card.setPadding(UiKit.dp(host, 20), UiKit.dp(host, 4), UiKit.dp(host, 20), UiKit.dp(host, 4));
+        for (java.util.Map.Entry<String, String> e : display.entrySet()) {
+            LinearLayout row = new LinearLayout(host);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            TextView k = new TextView(host);
+            k.setText(e.getKey());
+            k.setTextSize(16);
+            k.setTextColor(0xFF222222);
+            k.setWidth(UiKit.dp(host, 76));
+            TextView val = new TextView(host);
+            val.setText(readable(e.getValue()));
+            val.setTextSize(15);
+            val.setTextColor(0xFF6C6C6C);
+            row.addView(k);
+            row.addView(val, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+            card.addView(row, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 44)));
+        }
+        scroll.addView(card);
+        LinearLayout.LayoutParams scLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1);
+        scLp.topMargin = UiKit.dp(host, 12);
+        panel.addView(scroll, scLp);
+
+        // 支付说明(发放以充值回调为准——固化口径)
+        TextView explain = UiKit.hint(host, "当前页面只承载 SDK 自有支付流程。游戏内物品发放以游戏服务端收到并校验通过的充值回调为准,客户端通知只用于界面状态。");
+        LinearLayout.LayoutParams exLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        exLp.topMargin = UiKit.dp(host, 10);
+        panel.addView(explain, exLp);
+
+        // 底部支付栏
+        LinearLayout payBar = new LinearLayout(host);
+        payBar.setOrientation(LinearLayout.HORIZONTAL);
+        payBar.setGravity(Gravity.CENTER_VERTICAL);
+        payBar.setBackground(UiKit.rounded(0xFF3F3F3F, UiKit.dp(host, 999)));
+        TextView amount = new TextView(host);
+        amount.setText("应付:" + display.get("金额"));
+        amount.setTextSize(20);
+        amount.setTextColor(UiKit.WHITE);
+        amount.setGravity(Gravity.CENTER);
+        payBar.addView(amount, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1));
+        TextView confirm = new TextView(host);
+        confirm.setText("确认支付");
+        confirm.setTextSize(20);
+        confirm.setTextColor(UiKit.WHITE);
+        confirm.getPaint().setFakeBoldText(true);
+        confirm.setGravity(Gravity.CENTER);
+        confirm.setBackgroundColor(0xFFFF4962);
+        payBar.addView(confirm, new LinearLayout.LayoutParams(UiKit.dp(host, 156), ViewGroup.LayoutParams.MATCH_PARENT));
+        LinearLayout.LayoutParams pbLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 58));
+        pbLp.topMargin = UiKit.dp(host, 12);
+        panel.addView(payBar, pbLp);
+        confirm.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                // 客户端支付状态:已交接(仅 UI;发放以充值回调为准)
+                toast("支付处理中,等待服务端充值回调");
+                dismiss();
+                restoreFloatBall();
+            }
+        });
+
+        overlay.addView(panel, plp);
+        ViewGroup root = (ViewGroup) host.findViewById(android.R.id.content);
+        root.addView(overlay, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+    }
+
+    private void mountFloatBall(String account) {
+        this.floatAccount = account;
+        if (floatBall != null) {
+            return; // 已存在
+        }
+        final TextView ball = new TextView(host);
+        ball.setText("账");
+        ball.setTextSize(15);
+        ball.setTextColor(UiKit.WHITE);
+        ball.getPaint().setFakeBoldText(true);
+        ball.setGravity(Gravity.CENTER);
+        ball.setBackground(UiKit.rounded(0xD62A303E, UiKit.dp(host, 999)));
+        int size = UiKit.dp(host, 48);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(size, size);
+        lp.gravity = Gravity.START | Gravity.CENTER_VERTICAL;
+        lp.leftMargin = UiKit.dp(host, 8);
+        ball.setLayoutParams(lp);
+        ball.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                openUserCenter(floatAccount);
+            }
+        });
+        ViewGroup root = (ViewGroup) host.findViewById(android.R.id.content);
+        root.addView(ball);
+        floatBall = ball;
+    }
+
+    private void restoreFloatBall() {
+        if (floatBall == null && floatAccount != null) {
+            mountFloatBall(floatAccount);
+        }
+    }
+
+    @SuppressWarnings({"SetJavaScriptEnabled", "AddJavascriptInterface"})
+    private void openUserCenter(final String account) {
+        dismiss();
+        overlay = new FrameLayout(host);
+        overlay.setBackgroundColor(UiKit.MASK);
+        overlay.setClickable(true);
+
+        android.webkit.WebView web = new android.webkit.WebView(host);
+        android.webkit.WebSettings ws = web.getSettings();
+        ws.setJavaScriptEnabled(true);
+        ws.setJavaScriptCanOpenWindowsAutomatically(false);
+        ws.setAllowFileAccess(false);
+        ws.setAllowFileAccessFromFileURLs(false);
+        ws.setAllowUniversalAccessFromFileURLs(false);
+        web.addJavascriptInterface(new UserCenterBridge(account), "UserCenter");
+        // baseURL=null(不伪造域名,06 §5.1)
+        web.loadDataWithBaseURL(null, userCenterHtml(account), "text/html", "utf-8", null);
+
+        int dm = host.getResources().getDisplayMetrics().widthPixels;
+        boolean portrait = host.getResources().getConfiguration().orientation
+                == android.content.res.Configuration.ORIENTATION_PORTRAIT;
+        int w = Math.min(dm, Math.max(UiKit.dp(host, 520), (int) (dm * 0.58)));
+        if (portrait) {
+            w = Math.min(w, (int) (dm * 0.8)); // 竖屏 ≤80% 留游戏可见条
+        }
+        FrameLayout.LayoutParams wlp = new FrameLayout.LayoutParams(w, ViewGroup.LayoutParams.MATCH_PARENT);
+        wlp.gravity = Gravity.START;
+        overlay.addView(web, wlp);
+        ViewGroup root = (ViewGroup) host.findViewById(android.R.id.content);
+        root.addView(overlay, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+    }
+
+    /** JS Bridge 最小契约(06 §3):仅两方法。 */
+    private final class UserCenterBridge {
+        private final String account;
+
+        UserCenterBridge(String account) {
+            this.account = account;
+        }
+
+        @android.webkit.JavascriptInterface
+        public String getAccountContext() {
+            return "{\"accountId\":\"" + account + "\"}";
+        }
+
+        @android.webkit.JavascriptInterface
+        public void postAccountAction(String action) {
+            final String a = ("logout".equals(action) || "switch_account".equals(action) || "session_invalid".equals(action))
+                    ? action : "unknown";
+            main.post(new Runnable() {
+                public void run() {
+                    dismiss();
+                    if (!"unknown".equals(a)) {
+                        background.execute(new Runnable() {
+                            public void run() {
+                                controller.onUserCenterAction(a);
+                            }
+                        });
+                    }
+                }
+            });
+        }
+    }
+
+    private String userCenterHtml(String account) {
+        return "<!doctype html><html><head><meta charset='utf-8'>"
+                + "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+                + "<style>body{margin:0;font-family:sans-serif;background:#f5f6f8;color:#25272b}"
+                + ".hero{background:#ffc936;padding:28px 24px;color:#5d4300}.hero .id{font-size:22px;font-weight:700}"
+                + ".card{background:#fff;margin:16px;border-radius:8px;overflow:hidden}"
+                + ".row{padding:16px;border-bottom:1px solid #f0f1f4;font-size:16px}.row:active{background:#f7f7f7}"
+                + ".tip{color:#9aa0a8;font-size:13px;margin:16px;line-height:1.6}</style></head><body>"
+                + "<div class='hero'><div>当前游戏小号 ID</div><div class='id'>" + account + "</div></div>"
+                + "<div class='card'>"
+                + "<div class='row' onclick=\"UserCenter.postAccountAction('switch_account')\">切换小号</div>"
+                + "<div class='row' onclick=\"UserCenter.postAccountAction('logout')\">退出登录</div>"
+                + "</div>"
+                + "<div class='tip'>当前为最小化用户中心容器,仅提供小号上下文、切换小号与退出登录。</div>"
+                + "</body></html>";
+    }
+
+    private android.graphics.drawable.GradientDrawable topRounded(int color, int r) {
+        android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
+        g.setColor(color);
+        g.setCornerRadii(new float[]{r, r, r, r, 0, 0, 0, 0});
+        return g;
+    }
+
     // ===== 模态构建 =====
 
     private void mountProtocol() {
@@ -588,7 +927,7 @@ public final class SdkUi implements FlowUi {
         card.addView(tabs);
         tabPwd.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
-                toast("密码登录暂未开放,请用验证码登录");
+                mountPasswordLogin();
             }
         });
 
@@ -719,6 +1058,211 @@ public final class SdkUi implements FlowUi {
         mount(card);
     }
 
+    private void mountPasswordLogin() {
+        protocolChecked = false;
+        LinearLayout card = UiKit.modalCard(host, 340);
+        LinearLayout tabs = new LinearLayout(host);
+        tabs.setOrientation(LinearLayout.HORIZONTAL);
+        TextView tabSms = tab(host, "验证码登录", false);
+        TextView tabPwd = tab(host, "密码登录", true);
+        tabs.addView(tabSms);
+        tabs.addView(tabPwd);
+        card.addView(tabs);
+        tabSms.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                mountLogin();
+            }
+        });
+
+        TextView tip = new TextView(host);
+        tip.setText("可使用手机号或账号密码登录");
+        tip.setTextSize(12);
+        tip.setTextColor(UiKit.MUTED);
+        LinearLayout.LayoutParams tipLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        tipLp.topMargin = UiKit.dp(host, 14);
+        card.addView(tip, tipLp);
+
+        final android.widget.EditText acct = UiKit.input(host, "请输入手机号码");
+        card.addView(acct);
+
+        // 密码行 + 显示切换
+        LinearLayout pwdRow = new LinearLayout(host);
+        pwdRow.setOrientation(LinearLayout.HORIZONTAL);
+        pwdRow.setGravity(Gravity.CENTER_VERTICAL);
+        pwdRow.setBackground(UiKit.rounded(UiKit.WEAK, UiKit.dp(host, 6)));
+        pwdRow.setPadding(0, 0, UiKit.dp(host, 10), 0);
+        LinearLayout.LayoutParams pwdRowLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 44));
+        pwdRowLp.topMargin = UiKit.dp(host, 12);
+        final android.widget.EditText pwd = new android.widget.EditText(host);
+        pwd.setHint("请输入密码");
+        pwd.setSingleLine(true);
+        pwd.setTextSize(14);
+        pwd.setTextColor(UiKit.TEXT);
+        pwd.setHintTextColor(UiKit.HINT);
+        pwd.setBackgroundColor(0x00000000);
+        pwd.setPadding(UiKit.dp(host, 14), 0, UiKit.dp(host, 8), 0);
+        pwd.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        pwdRow.addView(pwd, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1));
+        final TextView showBtn = new TextView(host);
+        showBtn.setText("显示");
+        showBtn.setTextSize(13);
+        showBtn.setTextColor(UiKit.PRIMARY_DEEP);
+        showBtn.setGravity(Gravity.CENTER);
+        showBtn.setClickable(true);
+        pwdRow.addView(showBtn, new LinearLayout.LayoutParams(UiKit.dp(host, 80), ViewGroup.LayoutParams.MATCH_PARENT));
+        card.addView(pwdRow, pwdRowLp);
+        final boolean[] shown = {false};
+        showBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                shown[0] = !shown[0];
+                pwd.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+                        | (shown[0] ? android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+                        : android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD));
+                pwd.setSelection(pwd.getText().length());
+                showBtn.setText(shown[0] ? "隐藏" : "显示");
+            }
+        });
+
+        TextView loginBtn = UiKit.primaryButton(host, "登录");
+        card.addView(loginBtn);
+        card.addView(protocolRow());
+
+        loginBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                if (!protocolChecked) {
+                    toast("请先阅读并同意协议");
+                    return;
+                }
+                final String a = acct.getText().toString().trim();
+                final String p = pwd.getText().toString();
+                if (a.isEmpty()) {
+                    toast("请输入手机号或账号");
+                    return;
+                }
+                if (p.isEmpty()) {
+                    toast("请输入密码");
+                    return;
+                }
+                background.execute(new Runnable() {
+                    public void run() {
+                        controller.submitPasswordLogin(a, p);
+                    }
+                });
+            }
+        });
+        mount(card);
+    }
+
+    @Override
+    public void showDeviceVerify(final String loginAccount) {
+        main.post(new Runnable() {
+            public void run() {
+                mountDeviceVerify(loginAccount);
+            }
+        });
+    }
+
+    private void mountDeviceVerify(final String loginAccount) {
+        LinearLayout card = UiKit.modalCard(host, 420);
+        card.addView(UiKit.title(host, "设备安全验证"));
+        LinearLayout.LayoutParams hintLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        hintLp.topMargin = UiKit.dp(host, 14);
+        card.addView(UiKit.hint(host, "设备首次账号密码登录时,需进行绑定手机号短信验证。"), hintLp);
+
+        LinearLayout codeRow = new LinearLayout(host);
+        codeRow.setOrientation(LinearLayout.HORIZONTAL);
+        codeRow.setGravity(Gravity.CENTER_VERTICAL);
+        codeRow.setBackground(UiKit.rounded(UiKit.WEAK, UiKit.dp(host, 6)));
+        codeRow.setPadding(0, 0, UiKit.dp(host, 10), 0);
+        LinearLayout.LayoutParams crLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 44));
+        crLp.topMargin = UiKit.dp(host, 14);
+        final android.widget.EditText code = new android.widget.EditText(host);
+        code.setHint("请输入验证码");
+        code.setSingleLine(true);
+        code.setTextSize(14);
+        code.setBackgroundColor(0x00000000);
+        code.setPadding(UiKit.dp(host, 14), 0, UiKit.dp(host, 8), 0);
+        code.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        codeRow.addView(code, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1));
+        sendCodeButton = new TextView(host);
+        sendCodeButton.setText("发送验证码");
+        sendCodeButton.setTextSize(13);
+        sendCodeButton.setTextColor(UiKit.PRIMARY_DEEP);
+        sendCodeButton.setGravity(Gravity.CENTER);
+        sendCodeButton.setClickable(true);
+        codeRow.addView(sendCodeButton, new LinearLayout.LayoutParams(UiKit.dp(host, 104), ViewGroup.LayoutParams.MATCH_PARENT));
+        card.addView(codeRow, crLp);
+
+        TextView submit = UiKit.primaryButton(host, "提交");
+        card.addView(submit);
+        sendCodeButton.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                sendCodeButton.setEnabled(false);
+                sendCodeButton.setText("发送中");
+                sendCodeButton.setTextColor(UiKit.HINT);
+                background.execute(new Runnable() {
+                    public void run() {
+                        controller.requestCode(loginAccount); // 发往账户绑定手机号
+                    }
+                });
+            }
+        });
+        submit.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                final String c = code.getText().toString().trim();
+                if (c.isEmpty()) {
+                    toast("请输入验证码");
+                    return;
+                }
+                background.execute(new Runnable() {
+                    public void run() {
+                        controller.submitDeviceVerify(c);
+                    }
+                });
+            }
+        });
+        mount(card);
+    }
+
+    /** 协议勾选行(登录/密码登录共用)。 */
+    private LinearLayout protocolRow() {
+        LinearLayout checkRow = new LinearLayout(host);
+        checkRow.setOrientation(LinearLayout.HORIZONTAL);
+        checkRow.setGravity(Gravity.CENTER_VERTICAL);
+        checkRow.setClickable(true);
+        LinearLayout.LayoutParams checkLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        checkLp.topMargin = UiKit.dp(host, 12);
+        checkRow.setLayoutParams(checkLp);
+        final TextView box = new TextView(host);
+        box.setWidth(UiKit.dp(host, 18));
+        box.setHeight(UiKit.dp(host, 18));
+        box.setGravity(Gravity.CENTER);
+        box.setTextSize(12);
+        box.setTextColor(UiKit.WHITE);
+        box.setBackground(UiKit.roundedStroke(UiKit.WHITE, UiKit.dp(host, 9), 0xFFD5D7DD, UiKit.dp(host, 1)));
+        TextView checkText = new TextView(host);
+        checkText.setText("我已阅读并同意 用户协议 和 隐私政策");
+        checkText.setTextSize(12);
+        checkText.setTextColor(UiKit.CHECK_TEXT);
+        LinearLayout.LayoutParams ctLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        ctLp.leftMargin = UiKit.dp(host, 8);
+        checkRow.addView(box);
+        checkRow.addView(checkText, ctLp);
+        checkRow.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                protocolChecked = !protocolChecked;
+                if (protocolChecked) {
+                    box.setText("✓");
+                    box.setBackground(UiKit.rounded(UiKit.PRIMARY, UiKit.dp(host, 9)));
+                } else {
+                    box.setText("");
+                    box.setBackground(UiKit.roundedStroke(UiKit.WHITE, UiKit.dp(host, 9), 0xFFD5D7DD, UiKit.dp(host, 1)));
+                }
+            }
+        });
+        return checkRow;
+    }
+
     private TextView tab(Activity c, String text, boolean selected) {
         TextView t = new TextView(c);
         t.setText(text);
@@ -746,6 +1290,53 @@ public final class SdkUi implements FlowUi {
         ViewGroup root = (ViewGroup) host.findViewById(android.R.id.content);
         root.addView(overlay, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+    }
+
+    /** 退出游戏确认弹窗(07 §10c,#30):由 facade 直接调用。 */
+    public void showQuitConfirm(final Runnable onConfirm, final Runnable onCancel) {
+        main.post(new Runnable() {
+            public void run() {
+                LinearLayout card = UiKit.modalCard(host, 420);
+                card.addView(UiKit.title(host, "退出游戏"));
+                LinearLayout.LayoutParams hintLp = new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+                hintLp.topMargin = UiKit.dp(host, 14);
+                card.addView(UiKit.hint(host, "确认退出游戏吗?"), hintLp);
+                LinearLayout row = new LinearLayout(host);
+                row.setOrientation(LinearLayout.HORIZONTAL);
+                LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 48));
+                rowLp.topMargin = UiKit.dp(host, 18);
+                TextView cancel = UiKit.secondaryButton(host, "取消");
+                TextView confirm = UiKit.primaryButton(host, "退出");
+                LinearLayout.LayoutParams half = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1);
+                half.rightMargin = UiKit.dp(host, 10);
+                LinearLayout.LayoutParams half2 = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1);
+                half2.leftMargin = UiKit.dp(host, 10);
+                cancel.setLayoutParams(half);
+                confirm.setLayoutParams(half2);
+                row.addView(cancel);
+                row.addView(confirm);
+                card.addView(row, rowLp);
+                cancel.setOnClickListener(new View.OnClickListener() {
+                    public void onClick(View v) {
+                        dismiss();
+                        if (onCancel != null) {
+                            onCancel.run();
+                        }
+                    }
+                });
+                confirm.setOnClickListener(new View.OnClickListener() {
+                    public void onClick(View v) {
+                        dismiss();
+                        if (onConfirm != null) {
+                            onConfirm.run();
+                        }
+                    }
+                });
+                mount(card);
+            }
+        });
     }
 
     /** 卸载当前模态层并取消倒计时(完整收尾)。 */

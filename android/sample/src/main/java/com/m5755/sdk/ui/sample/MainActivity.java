@@ -12,8 +12,11 @@ import android.widget.Toast;
 
 import com.m5755.operate.api.DataListener;
 import com.m5755.operate.api.Listener;
+import com.m5755.operate.api.OnQuitGameListener;
 import com.m5755.operate.api.Operate;
 import com.m5755.operate.api.Options;
+import com.m5755.operate.api.Order;
+import com.m5755.operate.api.RoleInfo;
 import com.m5755.operate.api.User;
 import com.m5755.operate.api.UserListener;
 import com.m5755.operate.core.net.PlatformConfig;
@@ -115,6 +118,73 @@ public class MainActivity extends Activity {
                         runOnUiThread(new Runnable() {
                             public void run() {
                                 setStatus(success ? "已切换 account=" + user.getAccount() : message);
+                            }
+                        });
+                    }
+                });
+            }
+        });
+
+        addButton(root, "角色上报(sendRoleInfo)", new Runnable() {
+            public void run() {
+                RoleInfo r = new RoleInfo();
+                r.setServerId("s1");
+                r.setServerName("星河一区");
+                r.setRoleId("role_1");
+                r.setRoleName("云起");
+                r.setRoleLevel("68");
+                r.setRoleCe("128000");
+                r.setRoleRechargeAmount("328.00");
+                Operate.sendRoleInfo(r, new Listener() {
+                    public void onResult(final boolean success, int code, final String message) {
+                        runOnUiThread(new Runnable() {
+                            public void run() {
+                                setStatus(success ? "角色上报成功" : "角色上报失败:" + message);
+                            }
+                        });
+                    }
+                });
+            }
+        });
+
+        addButton(root, "游戏支付(recharge)", new Runnable() {
+            public void run() {
+                Order o = new Order();
+                o.setAmount(328.0);
+                o.setCpOrderId("P5755" + System.currentTimeMillis());
+                o.setCommodity("648 元宝");
+                o.setServerId("s1");
+                o.setServerName("星河一区");
+                o.setRoleId("role_1");
+                o.setRoleName("云起");
+                o.setRoleLevel("68");
+                Operate.recharge(MainActivity.this, o, new Listener() {
+                    public void onResult(final boolean success, int code, final String message) {
+                        runOnUiThread(new Runnable() {
+                            public void run() {
+                                setStatus("支付状态:" + message);
+                            }
+                        });
+                    }
+                });
+            }
+        });
+
+        addButton(root, "退出确认(shouldQuitGame)", new Runnable() {
+            public void run() {
+                Operate.shouldQuitGame(MainActivity.this, new OnQuitGameListener() {
+                    public void onQuit() {
+                        runOnUiThread(new Runnable() {
+                            public void run() {
+                                setStatus("玩家确认退出");
+                            }
+                        });
+                    }
+
+                    public void onCancel() {
+                        runOnUiThread(new Runnable() {
+                            public void run() {
+                                setStatus("取消退出");
                             }
                         });
                     }

@@ -77,4 +77,16 @@ public final class SharedPrefsStorage implements Storage {
     public String getSubaccountToken() {
         return sp.getString(K_SUB_TOKEN, null);
     }
+
+    private static final String K_DEVICE_ID = "device_id";
+
+    @Override
+    public String getOrCreateDeviceId() {
+        String id = sp.getString(K_DEVICE_ID, null);
+        if (id == null) {
+            id = "and_" + java.util.UUID.randomUUID().toString().replace("-", "");
+            sp.edit().putString(K_DEVICE_ID, id).apply();
+        }
+        return id;
+    }
 }

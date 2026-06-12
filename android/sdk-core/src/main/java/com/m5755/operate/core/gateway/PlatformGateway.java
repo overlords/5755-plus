@@ -15,6 +15,10 @@ public interface PlatformGateway {
     Results.Login login(String gameId, String loginAccount, String credential,
                         String channelId, String channelSource);
 
+    /** #29 密码登录(含设备 ID 与可选设备验证码)。 */
+    Results.Login loginPassword(String gameId, String loginAccount, String password,
+                                String deviceId, String deviceVerifyCode, String channelId, String channelSource);
+
     /** #15 账户有效检查(凭据走请求头)。 */
     Results.AccountCheck checkAccount(String gameId, String platformAccountId, String platformToken);
 
@@ -33,4 +37,10 @@ public interface PlatformGateway {
 
     /** #18 小号登录(签发游戏侧 account/token)。 */
     Results.SubaccountLogin loginSubaccount(String gameId, String platformAccountId, String platformToken, String account);
+
+    /** #27 角色上报(小号令牌鉴权)。fields 为已校验的角色字段。 */
+    Results.RoleReport reportRole(String gameId, String account, String token, java.util.Map<String, String> fields);
+
+    /** #28 支付创建(小号令牌鉴权)。 */
+    Results.OrderCreate createOrder(String gameId, String account, String token, java.util.Map<String, Object> order);
 }

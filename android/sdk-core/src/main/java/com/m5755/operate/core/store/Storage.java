@@ -29,4 +29,7 @@ public interface Storage {
     void saveSubaccount(String account, String subaccountToken);
 
     String getSubaccountToken();
+
+    /** 安装级随机设备 ID(首次生成并持久化;卸载重装即变;非硬件标识)。 */
+    String getOrCreateDeviceId();
 }

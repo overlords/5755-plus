@@ -170,6 +170,71 @@ public final class Operate {
         });
     }
 
+    /** #27 角色上报。 */
+    public static void sendRoleInfo(RoleInfo roleInfo) {
+        sendRoleInfo(roleInfo, null);
+    }
+
+    public static void sendRoleInfo(final RoleInfo roleInfo, final Listener listener) {
+        if (controller == null) {
+            if (listener != null) {
+                listener.onResult(false, OperateCode.NOT_INITIALIZED, "未初始化");
+            }
+            return;
+        }
+        background.execute(new Runnable() {
+            public void run() {
+                controller.reportRole(roleInfo, listener);
+            }
+        });
+    }
+
+    /** #28 支付。 */
+    public static void recharge(Activity activity, final Order order, final Listener listener) {
+        if (controller == null) {
+            if (listener != null) {
+                listener.onResult(false, OperateCode.NOT_INITIALIZED, "未初始化");
+            }
+            return;
+        }
+        background.execute(new Runnable() {
+            public void run() {
+                controller.recharge(order, listener);
+            }
+        });
+    }
+
+    /** #30 退出游戏确认。 */
+    public static void shouldQuitGame(Activity activity, final OnQuitGameListener listener) {
+        if (ui == null) {
+            if (listener != null) {
+                listener.onQuit();
+            }
+            return;
+        }
+        ui.showQuitConfirm(new Runnable() {
+            public void run() {
+                if (listener != null) {
+                    listener.onQuit();
+                }
+            }
+        }, new Runnable() {
+            public void run() {
+                if (listener != null) {
+                    listener.onCancel();
+                }
+            }
+        });
+    }
+
+    /** #30 销毁:释放 SDK 资源,不改变账号状态(03 §6)。 */
+    public static void destroy(Activity activity) {
+        if (ui != null) {
+            ui.hideFloatBall();
+        }
+        inited = false;
+    }
+
     // ---- 内部 ----
 
     private static UserListener dispatchUserListener() {

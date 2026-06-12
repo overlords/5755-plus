@@ -22,6 +22,7 @@ public final class Reason {
     public static final String SIGNATURE_INVALID = "signature_invalid";
     public static final String TIMESTAMP_EXPIRED = "timestamp_expired";
     public static final String PLATFORM_UNAVAILABLE = "platform_unavailable";
+    public static final String DEVICE_VERIFICATION_REQUIRED = "device_verification_required";
 
     private Reason() {
     }

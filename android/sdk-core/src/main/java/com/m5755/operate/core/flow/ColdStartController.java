@@ -172,6 +172,32 @@ public final class ColdStartController {
 
     public void submitLogin(String phone, String code) {
         Results.Login r = gateway.login(gameId, phone, code, channelId, channelSource);
+        afterAccountLogin(r);
+    }
+
+    /** #29 密码登录提交。 */
+    private String pendingPasswordAccount;
+    private String pendingPassword;
+
+    public void submitPasswordLogin(String account, String password) {
+        this.pendingPasswordAccount = account;
+        this.pendingPassword = password;
+        Results.Login r = gateway.loginPassword(gameId, account, password, storage.getOrCreateDeviceId(), null, channelId, channelSource);
+        if (Reason.DEVICE_VERIFICATION_REQUIRED.equals(r.reason)) {
+            ui.showDeviceVerify(account); // 设备首次密码登录 → 设备安全验证页
+            return;
+        }
+        afterAccountLogin(r);
+    }
+
+    /** 设备验证页提交验证码 → 带码续登。 */
+    public void submitDeviceVerify(String code) {
+        Results.Login r = gateway.loginPassword(gameId, pendingPasswordAccount, pendingPassword,
+                storage.getOrCreateDeviceId(), code, channelId, channelSource);
+        afterAccountLogin(r);
+    }
+
+    private void afterAccountLogin(Results.Login r) {
         if (!r.ok) {
             ui.showLoginError(r.reason, r.message);
             return;
@@ -341,6 +367,7 @@ public final class ColdStartController {
             listener.onLogout(); // 切换小号收敛到账号变化(03 §5)
         }
         ui.showSessionCheck(r.account, maskToken(r.token));
+        ui.showFloatBall(r.account); // 游戏进入后悬浮球(#26)
         flow.onFlowSuccess(r.account, r.token);
     }
 
@@ -362,7 +389,147 @@ public final class ColdStartController {
         return true;
     }
 
+    // ===== #27 角色上报 =====
+
+    public void reportRole(com.m5755.operate.api.RoleInfo info, com.m5755.operate.api.Listener cb) {
+        String account = storage.getAccount();
+        String token = storage.getSubaccountToken();
+        if (account == null || token == null) {
+            done(cb, false, com.m5755.operate.provider.OperateCode.NOT_INITIALIZED, "未登录或登录令牌为空");
+            return;
+        }
+        // 客户端校验(05 §1.3)
+        String err = validateRole(info);
+        if (err != null) {
+            done(cb, false, com.m5755.operate.provider.OperateCode.PARAM_ERROR, err);
+            ui.showRoleResult(false, "param_invalid", roleFields(info));
+            return;
+        }
+        Results.RoleReport r = gateway.reportRole(gameId, account, token, roleFields(info));
+        ui.showRoleResult(r.ok, r.reason, roleFields(info));
+        done(cb, r.ok, r.ok ? 0 : com.m5755.operate.provider.OperateCode.FAILURE, r.ok ? "上报成功" : r.message);
+    }
+
+    private static String validateRole(com.m5755.operate.api.RoleInfo i) {
+        if (isBlank(i.getServerId()) || isBlank(i.getServerName()) || isBlank(i.getRoleName()) || isBlank(i.getRoleLevel())) {
+            return "角色字段不完整";
+        }
+        if (isBlank(i.getRoleId()) || "-1".equals(i.getRoleId())) {
+            return "roleId 必须为唯一角色 ID";
+        }
+        String amt = i.getRoleRechargeAmount();
+        if (amt != null && !"-1".equals(amt) && !amt.matches("\\d+\\.\\d{2}")) {
+            return "累计充值金额须为 -1 或两位小数";
+        }
+        return null;
+    }
+
+    private static java.util.Map<String, String> roleFields(com.m5755.operate.api.RoleInfo i) {
+        java.util.Map<String, String> m = new java.util.LinkedHashMap<String, String>();
+        m.put("serverId", nv(i.getServerId()));
+        m.put("serverName", nv(i.getServerName()));
+        m.put("roleId", nv(i.getRoleId()));
+        m.put("roleName", nv(i.getRoleName()));
+        m.put("roleLevel", nv(i.getRoleLevel()));
+        m.put("roleCe", nv(i.getRoleCe()));
+        m.put("roleStage", nv(i.getRoleStage()));
+        m.put("roleRechargeAmount", nv(i.getRoleRechargeAmount()));
+        m.put("roleGuild", nv(i.getRoleGuild()));
+        return m;
+    }
+
+    // ===== #28 支付 =====
+
+    public void recharge(com.m5755.operate.api.Order order, com.m5755.operate.api.Listener cb) {
+        String account = storage.getAccount();
+        String token = storage.getSubaccountToken();
+        if (account == null || token == null) {
+            done(cb, false, com.m5755.operate.provider.OperateCode.NOT_INITIALIZED, "未登录或登录令牌为空");
+            return;
+        }
+        String err = validateOrder(order);
+        if (err != null) {
+            done(cb, false, com.m5755.operate.provider.OperateCode.PARAM_ERROR, err); // 无演示订单兜底
+            return;
+        }
+        java.util.Map<String, Object> body = new java.util.LinkedHashMap<String, Object>();
+        body.put("amount", order.getAmount());
+        body.put("cpOrderId", order.getCpOrderId());
+        body.put("commodity", order.getCommodity());
+        body.put("serverId", order.getServerId());
+        body.put("serverName", order.getServerName());
+        body.put("roleId", order.getRoleId());
+        body.put("roleName", order.getRoleName());
+        body.put("roleLevel", order.getRoleLevel());
+        Results.OrderCreate r = gateway.createOrder(gameId, account, token, body);
+        if (!r.ok) {
+            // 防沉迷支付门禁仅失败本次支付,不触发账号变化(03 §3)
+            done(cb, false, com.m5755.operate.provider.OperateCode.FAILURE, r.message);
+            return;
+        }
+        // 展示支付容器(订单显示取自 Order 入参,05 §2.3)
+        java.util.Map<String, String> display = new java.util.LinkedHashMap<String, String>();
+        display.put("商品", order.getCommodity());
+        display.put("金额", "￥" + String.format(java.util.Locale.ROOT, "%.2f", order.getAmount()));
+        display.put("小号", account);
+        display.put("区服", order.getServerName());
+        display.put("角色", order.getRoleName());
+        display.put("订单号", r.platformOrderId);
+        ui.showPayDrawer(display, r.paymentUrl);
+        // 客户端支付状态:容器交接后为"已交接"(仅 UI 口径,不表示到账)
+        done(cb, true, 0, "已交接");
+    }
+
+    private static String validateOrder(com.m5755.operate.api.Order o) {
+        if (!(o.getAmount() > 0) || Double.isNaN(o.getAmount()) || Double.isInfinite(o.getAmount())) {
+            return "金额必须大于 0";
+        }
+        if (isBlank(o.getCpOrderId()) || o.getCpOrderId().length() > 128) {
+            return "CP 订单号非法";
+        }
+        if (isBlank(o.getCommodity()) || isBlank(o.getServerId()) || isBlank(o.getServerName())
+                || isBlank(o.getRoleId()) || isBlank(o.getRoleName())) {
+            return "订单归属字段缺失";
+        }
+        return null;
+    }
+
+    // ===== 用户中心动作(#26) =====
+
+    /** 用户中心账号动作收敛(06 §4):switch_account/logout/session_invalid;非法值忽略。 */
+    public void onUserCenterAction(String action) {
+        if ("logout".equals(action)) {
+            logout();
+        } else if ("switch_account".equals(action)) {
+            changeUser();
+        } else if ("session_invalid".equals(action)) {
+            storage.clearSession();
+            listener.onLogout();
+            ui.showLoginWindow();
+        }
+        // 其他(unknown)忽略
+    }
+
+    public String currentAccount() {
+        return storage.getAccount();
+    }
+
     // ===== 内部 =====
+
+    private static void done(com.m5755.operate.api.Listener cb, boolean ok, int code, String msg) {
+        if (cb != null) {
+            cb.onResult(ok, code, msg);
+        }
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.isEmpty();
+    }
+
+    private static String nv(String s) {
+        return s == null ? "-1" : s;
+    }
+
 
     /** 主账户失效类失败统一路由:清会话 + 账号变化 + 回登录窗(03 §3)。 */
     private void routeAccountFailure(String reason, String message) {

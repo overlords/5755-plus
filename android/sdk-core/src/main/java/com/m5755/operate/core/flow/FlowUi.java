@@ -57,4 +57,21 @@ public interface FlowUi {
 
     /** 登录链路不可恢复阻断(如小号列表为空的平台侧异常):提示 + 诊断。 */
     void showFlowBlocked(String reason, String message);
+
+    // ===== 里程碑 3(#26-#28) =====
+
+    /** 角色上报结果弹窗(07 §10b):展示本次真实上报字段。 */
+    void showRoleResult(boolean success, String reason, java.util.Map<String, String> fields);
+
+    /** 支付容器(07 §9):订单显示取自入参,paymentUrl 由 WebView 承载。 */
+    void showPayDrawer(java.util.Map<String, String> orderDisplay, String paymentUrl);
+
+    /** 游戏进入后展示悬浮球(唯一入口=用户中心,07 §11)。 */
+    void showFloatBall(String account);
+
+    /** 释放悬浮球与所有层(destroy)。 */
+    void hideFloatBall();
+
+    /** 设备安全验证页(07 §4,#29):设备首次密码登录。 */
+    void showDeviceVerify(String loginAccount);
 }

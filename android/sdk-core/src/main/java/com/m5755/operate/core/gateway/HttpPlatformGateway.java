@@ -94,6 +94,52 @@ public final class HttpPlatformGateway implements PlatformGateway {
     }
 
     @Override
+    public Results.Login loginPassword(String gameId, String loginAccount, String password,
+                                       String deviceId, String deviceVerifyCode, String channelId, String channelSource) {
+        try {
+            JSONObject body = new JSONObject();
+            body.put("gameId", gameId);
+            body.put("loginMethod", "password");
+            body.put("loginAccount", loginAccount);
+            body.put("credential", password);
+            body.put("deviceId", deviceId);
+            if (deviceVerifyCode != null && !deviceVerifyCode.isEmpty()) {
+                body.put("deviceVerifyCode", deviceVerifyCode);
+            }
+            body.put("channelId", channelId);
+            body.put("channelSource", channelSource);
+            return parseLogin(call("POST", "/api/sdk/v2/account-sessions", "", body.toString()));
+        } catch (Exception e) {
+            Results.Login out = new Results.Login();
+            out.ok = false;
+            out.reason = Reason.PLATFORM_UNAVAILABLE;
+            out.message = "网络或解析失败";
+            return out;
+        }
+    }
+
+    private Results.Login parseLogin(Response r) {
+        Results.Login out = new Results.Login();
+        out.ok = r.success;
+        out.reason = r.reason;
+        out.message = r.message;
+        if (r.data != null) {
+            out.platformAccountId = r.data.optString("platformAccountId", "");
+            out.platformToken = r.data.optString("platformToken", "");
+            out.displayName = r.data.optString("displayName", "");
+            JSONObject ge = r.data.optJSONObject("gameEntry");
+            if (ge != null) {
+                out.isNewGameUser = ge.optBoolean("isNewGameUser", false);
+                JSONObject created = ge.optJSONObject("createdSubaccount");
+                if (created != null) {
+                    out.firstAccount = created.optString("account", "");
+                }
+            }
+        }
+        return out;
+    }
+
+    @Override
     public Results.Login login(String gameId, String loginAccount, String credential,
                                String channelId, String channelSource) {
         Results.Login out = new Results.Login();
@@ -290,6 +336,65 @@ public final class HttpPlatformGateway implements PlatformGateway {
             if (r.data != null) {
                 out.account = r.data.optString("account", "");
                 out.token = r.data.optString("token", "");
+            }
+        } catch (Exception e) {
+            out.ok = false;
+            out.reason = Reason.PLATFORM_UNAVAILABLE;
+            out.message = "网络或解析失败";
+        }
+        return out;
+    }
+
+    // ===== 里程碑 3 端点(#27/#28) =====
+
+    @Override
+    public Results.RoleReport reportRole(String gameId, String account, String token, java.util.Map<String, String> fields) {
+        Results.RoleReport out = new Results.RoleReport();
+        try {
+            JSONObject body = new JSONObject();
+            body.put("gameId", gameId);
+            body.put("account", account);
+            body.put("token", token);
+            for (java.util.Map.Entry<String, String> e : fields.entrySet()) {
+                body.put(e.getKey(), e.getValue());
+            }
+            Response r = call("PUT", "/api/sdk/v2/roles", "", body.toString());
+            out.ok = r.success;
+            out.reason = r.reason;
+            out.message = r.message;
+            if (r.data != null) {
+                out.reported = r.data.optBoolean("reported", false);
+            }
+        } catch (Exception e) {
+            out.ok = false;
+            out.reason = Reason.PLATFORM_UNAVAILABLE;
+            out.message = "网络或解析失败";
+        }
+        return out;
+    }
+
+    @Override
+    public Results.OrderCreate createOrder(String gameId, String account, String token, java.util.Map<String, Object> order) {
+        Results.OrderCreate out = new Results.OrderCreate();
+        try {
+            JSONObject body = new JSONObject();
+            body.put("gameId", gameId);
+            body.put("account", account);
+            body.put("token", token);
+            for (java.util.Map.Entry<String, Object> e : order.entrySet()) {
+                body.put(e.getKey(), e.getValue());
+            }
+            Response r = call("POST", "/api/sdk/v2/orders", "", body.toString());
+            out.ok = r.success;
+            out.reason = r.reason;
+            out.message = r.message;
+            if (r.data != null) {
+                out.platformOrderId = r.data.optString("platformOrderId", "");
+                out.paymentUrl = r.data.optString("paymentUrl", "");
+                out.account = r.data.optString("account", "");
+                out.amount = r.data.optString("amount", "");
+                out.commodity = r.data.optString("commodity", "");
+                out.serverName = r.data.optString("serverName", "");
             }
         } catch (Exception e) {
             out.ok = false;

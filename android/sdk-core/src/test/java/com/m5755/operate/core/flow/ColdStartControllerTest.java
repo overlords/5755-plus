@@ -256,6 +256,165 @@ public class ColdStartControllerTest {
         assertFalse(f.listener.logoutCalled);
     }
 
+    // ===== #27 角色上报 =====
+
+    @Test
+    public void roleReportClientValidationBlocksBadFields() {
+        Fixture f = loggedInWithSubaccount();
+        com.m5755.operate.api.RoleInfo info = validRole();
+        info.setRoleId("-1"); // 非法
+        final boolean[] cb = {false, false};
+        f.c.reportRole(info, (s, code, m) -> {
+            cb[0] = true;
+            cb[1] = s;
+        });
+        assertTrue("应回调", cb[0]);
+        assertFalse("roleId=-1 应失败", cb[1]);
+        assertTrue("展示失败结果", f.ui.calls.contains("showRoleResult:false"));
+    }
+
+    @Test
+    public void roleReportNotLoggedInFailsWithoutRequest() {
+        Fixture f = loggedIn(); // 有账户会话但无小号
+        final boolean[] cb = {false};
+        f.c.reportRole(validRole(), (s, code, m) -> cb[0] = s);
+        assertFalse("无当前小号应失败", cb[0]);
+        assertFalse("不应发起上报", f.ui.calls.contains("showRoleResult:true"));
+    }
+
+    @Test
+    public void roleReportSuccessShowsRealFields() {
+        Fixture f = loggedInWithSubaccount();
+        f.gw.roleReport.ok = true;
+        f.gw.roleReport.reported = true;
+        f.c.reportRole(validRole(), null);
+        assertTrue(f.ui.calls.contains("showRoleResult:true"));
+        assertEquals("云起", f.ui.lastRoleFields.get("roleName"));
+    }
+
+    // ===== #28 支付 =====
+
+    @Test
+    public void rechargeInvalidOrderNoRequest() {
+        Fixture f = loggedInWithSubaccount();
+        com.m5755.operate.api.Order o = validOrder();
+        o.setAmount(0); // 非法
+        final boolean[] cb = {false};
+        f.c.recharge(o, (s, code, m) -> cb[0] = s);
+        assertFalse(cb[0]);
+        assertFalse("无演示订单兜底,不应展示支付容器", f.ui.calls.contains("showPayDrawer"));
+    }
+
+    @Test
+    public void rechargeOKShowsPayDrawerFromInput() {
+        Fixture f = loggedInWithSubaccount();
+        f.gw.orderCreate.ok = true;
+        f.gw.orderCreate.platformOrderId = "P5755x";
+        f.gw.orderCreate.paymentUrl = "https://sdk-dev/pay/P5755x";
+        f.c.recharge(validOrder(), null);
+        assertTrue(f.ui.calls.contains("showPayDrawer"));
+        assertEquals("648 元宝", f.ui.lastPayDisplay.get("商品"));
+    }
+
+    @Test
+    public void rechargePaymentGateOnlyFailsPaymentNoAccountChange() {
+        Fixture f = loggedInWithSubaccount();
+        f.gw.orderCreate.ok = false;
+        f.gw.orderCreate.reason = "anti_addiction_payment_blocked";
+        final boolean[] cb = {true};
+        f.c.recharge(validOrder(), (s, code, m) -> cb[0] = s);
+        assertFalse("支付门禁仅失败本次支付", cb[0]);
+        assertFalse("不触发账号变化", f.listener.logoutCalled);
+    }
+
+    // ===== #29 密码登录 / 设备验证 =====
+
+    @Test
+    public void passwordLoginDeviceVerificationFlow() {
+        Fixture f = inited();
+        f.gw.passwordLogin.reason = "device_verification_required";
+        f.c.submitPasswordLogin("13900000000", "Test1234");
+        assertTrue("应进设备验证页", f.ui.calls.contains("showDeviceVerify:13900000000"));
+        // 带码续登成功
+        f.gw.passwordLogin.ok = true;
+        f.gw.passwordLogin.reason = null;
+        f.gw.passwordLogin.platformAccountId = "pa_pwd";
+        f.gw.passwordLogin.platformToken = "pt_pwd";
+        f.gw.realName.ok = true;
+        f.gw.realName.verified = true;
+        f.gw.list.ok = true;
+        f.gw.list.items.add(item("sub_p", "小号1", false));
+        f.c.submitDeviceVerify("123456");
+        assertEquals("续登应带验证码", "123456", f.gw.lastPasswordDeviceCode);
+        assertTrue("验证后继续到小号选择", f.ui.calls.contains("showSubaccountPicker"));
+    }
+
+    // ===== #26 用户中心动作 =====
+
+    @Test
+    public void userCenterSwitchEntersPicker() {
+        Fixture f = loggedInWithSubaccount();
+        f.gw.list.ok = true;
+        f.gw.list.items.add(item("sub_1", "小号1", false));
+        f.c.onUserCenterAction("switch_account");
+        assertTrue(f.ui.calls.contains("showSubaccountPicker"));
+    }
+
+    @Test
+    public void userCenterLogoutClearsAndShowsWindow() {
+        Fixture f = loggedInWithSubaccount();
+        f.c.onUserCenterAction("logout");
+        assertTrue(f.ui.calls.contains("showLoginWindow"));
+        assertTrue(f.listener.logoutCalled);
+        assertFalse(f.store.hasSession());
+    }
+
+    @Test
+    public void userCenterUnknownActionIgnored() {
+        Fixture f = loggedInWithSubaccount();
+        f.c.onUserCenterAction("hack");
+        assertFalse(f.listener.logoutCalled);
+        assertFalse(f.ui.calls.contains("showLoginWindow"));
+    }
+
+    private static com.m5755.operate.api.RoleInfo validRole() {
+        com.m5755.operate.api.RoleInfo i = new com.m5755.operate.api.RoleInfo();
+        i.setServerId("s1");
+        i.setServerName("星河一区");
+        i.setRoleId("role_1");
+        i.setRoleName("云起");
+        i.setRoleLevel("68");
+        i.setRoleRechargeAmount("328.00");
+        return i;
+    }
+
+    private static com.m5755.operate.api.Order validOrder() {
+        com.m5755.operate.api.Order o = new com.m5755.operate.api.Order();
+        o.setAmount(328.0);
+        o.setCpOrderId("cp_1");
+        o.setCommodity("648 元宝");
+        o.setServerId("s1");
+        o.setServerName("星河一区");
+        o.setRoleId("role_1");
+        o.setRoleName("云起");
+        o.setRoleLevel("68");
+        return o;
+    }
+
+    private static Fixture inited() {
+        Fixture f = new Fixture();
+        f.gw.config.ok = true;
+        f.gw.config.protocolVersion = "1";
+        f.c.init("g", "1.0.0", "p");
+        return f;
+    }
+
+    private static Fixture loggedInWithSubaccount() {
+        Fixture f = loggedIn();
+        f.store.saveSubaccount("sub_cur", "st_cur");
+        return f;
+    }
+
     // ===== 夹具 =====
 
     private static Results.SubaccountList.Item item(String account, String name, boolean dft) {
@@ -374,6 +533,24 @@ public class ColdStartControllerTest {
         public Results.SubaccountLogin loginSubaccount(String a, String b, String c, String d) {
             return subLogin;
         }
+
+        final Results.Login passwordLogin = new Results.Login();
+        final Results.RoleReport roleReport = new Results.RoleReport();
+        final Results.OrderCreate orderCreate = new Results.OrderCreate();
+        String lastPasswordDeviceCode;
+
+        public Results.Login loginPassword(String a, String b, String c, String dev, String code, String d, String e) {
+            lastPasswordDeviceCode = code;
+            return passwordLogin;
+        }
+
+        public Results.RoleReport reportRole(String a, String b, String c, java.util.Map<String, String> f) {
+            return roleReport;
+        }
+
+        public Results.OrderCreate createOrder(String a, String b, String c, java.util.Map<String, Object> o) {
+            return orderCreate;
+        }
     }
 
     static final class FakeStorage implements Storage {
@@ -427,6 +604,10 @@ public class ColdStartControllerTest {
 
         public String getSubaccountToken() {
             return subToken;
+        }
+
+        public String getOrCreateDeviceId() {
+            return "dev_test";
         }
     }
 
@@ -495,6 +676,31 @@ public class ColdStartControllerTest {
 
         public void showFlowBlocked(String reason, String message) {
             calls.add("showFlowBlocked:" + reason);
+        }
+
+        java.util.Map<String, String> lastRoleFields;
+        java.util.Map<String, String> lastPayDisplay;
+
+        public void showRoleResult(boolean success, String reason, java.util.Map<String, String> fields) {
+            calls.add("showRoleResult:" + success);
+            lastRoleFields = fields;
+        }
+
+        public void showPayDrawer(java.util.Map<String, String> orderDisplay, String paymentUrl) {
+            calls.add("showPayDrawer");
+            lastPayDisplay = orderDisplay;
+        }
+
+        public void showFloatBall(String account) {
+            calls.add("showFloatBall:" + account);
+        }
+
+        public void hideFloatBall() {
+            calls.add("hideFloatBall");
+        }
+
+        public void showDeviceVerify(String loginAccount) {
+            calls.add("showDeviceVerify:" + loginAccount);
         }
     }
 
