@@ -41,11 +41,11 @@ func main() {
 	platformEnv := envOrDefault("PLATFORM_ENV", "dev")
 	log.Printf("迁移已套用,平台环境=%s", platformEnv)
 
-	// 构建变体决定 bootstrap:dev=种子+测试密钥;production=fail-closed+密钥注入(M4-S3)。
-	callbackSecret, realNameMock := bootstrapEnv(ctx, st, platformEnv)
+	// 构建变体决定 bootstrap:dev=种子+测试密钥+mock 短信;production=fail-closed+密钥注入+京东云短信。
+	opt := bootstrapEnv(ctx, st, platformEnv)
 
 	baseURL := envOrDefault("PUBLIC_BASE_URL", "https://sdk-dev.xingninghuyu.com")
-	svc := domain.NewWith(st, domain.Options{CallbackSecret: callbackSecret, RealNameMock: realNameMock})
+	svc := domain.NewWith(st, opt)
 	r := api.NewRouter(svc, st, time.Now, baseURL)
 
 	srv := &http.Server{

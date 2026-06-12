@@ -6,10 +6,12 @@ import (
 	"context"
 	"crypto/rand"
 	"math/big"
+	"net/http"
 	"regexp"
 	"time"
 
 	"m5755/server/internal/result"
+	"m5755/server/internal/sms"
 	"m5755/server/internal/store"
 )
 
@@ -38,21 +40,30 @@ type Service struct {
 	now            func() time.Time
 	callbackSecret string
 	realNameMock   bool // dev=true(格式校验+mock 通过);prod=false(未配置真实 provider 时 fail-closed)
+	smsMock        bool // dev=true(返回 devCode 供联调);prod=false(京东云真发,响应不含 devCode)
+	smsConfig      sms.Config
+	httpClient     *http.Client
 }
 
 // Options 注入生产/联调差异(M4-S3:密钥环境注入,不再源码常量)。
 type Options struct {
 	CallbackSecret string
 	RealNameMock   bool
+	SmsMock        bool       // 缺省 false;dev bootstrap 显式置 true
+	SmsConfig      sms.Config // smsMock=false 时用于京东云发送
 }
 
 func New(s *store.Store) *Service {
-	// 兼容旧测试入口:dev 公开测试密钥 + mock 实名(联调口径)。
-	return NewWith(s, Options{CallbackSecret: "m5755-dev-callback-secret-v1", RealNameMock: true})
+	// 兼容旧测试入口:dev 公开测试密钥 + mock 实名/短信(联调口径)。
+	return NewWith(s, Options{CallbackSecret: "m5755-dev-callback-secret-v1", RealNameMock: true, SmsMock: true})
 }
 
 func NewWith(s *store.Store, opt Options) *Service {
-	return &Service{store: s, now: time.Now, callbackSecret: opt.CallbackSecret, realNameMock: opt.RealNameMock}
+	return &Service{
+		store: s, now: time.Now, callbackSecret: opt.CallbackSecret,
+		realNameMock: opt.RealNameMock, smsMock: opt.SmsMock, smsConfig: opt.SmsConfig,
+		httpClient: &http.Client{Timeout: 10 * time.Second},
+	}
 }
 
 // CallbackSecret 供测试接收端验证签名。
@@ -118,7 +129,9 @@ type SmsData struct {
 	ExpiresAt          string `json:"expiresAt"`
 	ProviderMode       string `json:"providerMode"`
 	ProviderStatus     string `json:"providerStatus"`
-	DevCode            string `json:"devCode,omitempty"`
+	ProviderRequestID  string `json:"providerRequestId,omitempty"`
+	ProviderBizID      string `json:"providerBizId,omitempty"`
+	DevCode            string `json:"devCode,omitempty"` // 仅 mock 模式;生产绝不返回
 }
 
 func (svc *Service) RequestSmsCode(ctx context.Context, gameID, loginAccount string) (*SmsData, *Fault) {
@@ -140,14 +153,31 @@ func (svc *Service) RequestSmsCode(ctx context.Context, gameID, loginAccount str
 	if err != nil {
 		return nil, fault(503, result.ReasonPlatformUnavailable, "短信签发失败")
 	}
-	return &SmsData{
+	data := &SmsData{
 		CodeID:             sc.CodeID,
 		LoginAccountMasked: maskPhone(loginAccount),
 		ExpiresAt:          sc.ExpiresAt.UTC().Format(time.RFC3339),
-		ProviderMode:       "mock",
-		ProviderStatus:     "accepted",
-		DevCode:            code, // mock 模式允许返回;不进诊断/日志
-	}, nil
+	}
+	if svc.smsMock {
+		// dev/联调:不真发,验证码随响应返回供测试夹具/调试 toast。生产构建 smsMock=false,绝不走这里。
+		data.ProviderMode = "mock"
+		data.ProviderStatus = "accepted"
+		data.DevCode = code // 仅 mock;不进诊断/日志
+		return data, nil
+	}
+	// 生产:京东云真发,fail-closed(凭据未就绪即拒绝,绝不退回 mock),响应不含 devCode。
+	if fails := svc.smsConfig.Validate(); len(fails) > 0 {
+		return nil, fault(503, result.ReasonPlatformUnavailable, "短信服务未就绪")
+	}
+	res, serr := sms.SendJDCloud(ctx, svc.httpClient, svc.smsConfig, loginAccount, code, svc.now())
+	if serr != nil {
+		return nil, fault(503, result.ReasonPlatformUnavailable, "短信发送失败")
+	}
+	data.ProviderMode = "jdcloud"
+	data.ProviderStatus = res.ProviderStatus
+	data.ProviderRequestID = res.ProviderRequestID
+	data.ProviderBizID = res.ProviderBizID
+	return data, nil // 注意:无 DevCode
 }
 
 // ---------- 5755 账户登录 ----------

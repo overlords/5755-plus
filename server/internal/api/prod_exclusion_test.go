@@ -48,7 +48,8 @@ func TestRealNameFailClosedWithoutProvider(t *testing.T) {
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
-	svc := domain.NewWith(st, domain.Options{CallbackSecret: "x", RealNameMock: false})
+	// SmsMock:true 让登录夹具走 mock 短信(本用例测的是实名 fail-closed,不是短信)。
+	svc := domain.NewWith(st, domain.Options{CallbackSecret: "x", RealNameMock: false, SmsMock: true})
 	srv := httptest.NewServer(NewRouter(svc, st, time.Now, "http://127.0.0.1:0"))
 	t.Cleanup(srv.Close)
 
