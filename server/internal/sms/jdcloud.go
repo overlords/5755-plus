@@ -17,6 +17,7 @@ import (
 	"net/url"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -291,7 +292,7 @@ func firstString(vals ...any) string {
 				return strings.TrimSpace(t)
 			}
 		case float64:
-			return fmt.Sprintf("%v", t)
+			return strconv.FormatFloat(t, 'f', -1, 64) // 整数状态码不渲染成科学计数法
 		case bool:
 			return fmt.Sprintf("%v", t)
 		}
