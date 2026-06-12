@@ -378,7 +378,9 @@ public final class SdkUi implements FlowUi {
     // ===== 挂载/卸载 =====
 
     private void mount(View card) {
-        dismiss();
+        // 仅卸载旧层并取消倒计时;不清空 sendCodeButton(调用方刚为新层赋值)。
+        main.removeCallbacks(countdownTick);
+        detachOverlay();
         overlay = new FrameLayout(host);
         overlay.setBackgroundColor(UiKit.MASK);
         overlay.setClickable(true); // 拦截穿透,点击遮罩不关闭
@@ -391,10 +393,14 @@ public final class SdkUi implements FlowUi {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
     }
 
-    /** 卸载当前模态层并取消倒计时。 */
+    /** 卸载当前模态层并取消倒计时(完整收尾)。 */
     public void dismiss() {
         main.removeCallbacks(countdownTick);
         sendCodeButton = null;
+        detachOverlay();
+    }
+
+    private void detachOverlay() {
         if (overlay != null) {
             ViewGroup parent = (ViewGroup) overlay.getParent();
             if (parent != null) {

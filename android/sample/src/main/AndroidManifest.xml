@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- 样例验证用:允许明文 HTTP 以便对接本地服务端(http://10.0.2.2)。
+         SDK 生产路径对接 https://sdk-dev,与此无关。 -->
     <application
         android:allowBackup="true"
         android:label="@string/app_name"
+        android:usesCleartextTraffic="true"
         android:theme="@android:style/Theme.Material.Light.DarkActionBar">
         <activity
             android:name=".MainActivity"
