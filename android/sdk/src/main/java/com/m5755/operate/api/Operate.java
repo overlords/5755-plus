@@ -66,6 +66,10 @@ public final class Operate {
         storage = new SharedPrefsStorage(activity);
         ui = new SdkUi(activity, background);
         controller = new ColdStartController(new HttpPlatformGateway(cfg), storage, ui, dispatchUserListener());
+        // 渠道两源解析(M4 渠道三件套):诊断型,异常回退 default 不阻断;真实值进 login/config 请求
+        com.m5755.operate.core.channel.ChannelRules.Result ch =
+                com.m5755.operate.core.channel.ChannelResolver.resolve(activity);
+        controller.setChannel(ch.resolved, ch.source);
         ui.setController(controller);
         background.execute(new Runnable() {
             public void run() {
