@@ -186,6 +186,7 @@ smallText 行距 +2dp;hint 行距 +3dp。粗体使用 `Typeface.DEFAULT` + `Type
 
 - 宽度数值一律以本文档各节公式为准;设计系统网页演示中的固定像素宽(如 560px)是网页端简化,不作为实现依据。
 - 旋转切换形态时:滚动位置可重置,但输入内容、勾选状态、倒计时等业务状态必须保留。
+- **实现机制(2026-06-12 决定)**:状态保留依赖宿主游戏 Activity 声明 `android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout"`(01 §6 游戏包规范,接入自检诊断型校验);SDK 层监听配置变化,仅做重新布局(弹窗宽度 clamp 重算、抽屉形态切换),不做 Activity 重建存活。
 
 ---
 

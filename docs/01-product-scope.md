@@ -122,7 +122,7 @@
 | 项目 | 规格 |
 | --- | --- |
 | Android 运行基线 | `minSdkVersion 21`,不因最小化重构提高最低系统版本 |
-| 游戏包规范 | 游戏包须满足 `targetSdk >= 26`,并满足 32/64 位 ABI 规范和签名规范(由接入自检校验,与 SDK 运行支持范围区分) |
+| 游戏包规范 | 游戏包须满足 `targetSdk >= 26`,并满足 32/64 位 ABI 规范和签名规范(由接入自检校验,与 SDK 运行支持范围区分);游戏 Activity 须声明 `android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout"`(手游引擎导出模板默认配置;SDK 层依赖它在旋转时保留业务状态,未声明时接入自检输出诊断警告,不阻断) |
 | 构建基线 | JDK 8+;Gradle 7.0+ 推荐但非硬门槛 |
 | 接入方式 | Gradle AAR 接入;在线 AAR 优先,本地原样 AAR/JAR 备选;不要求手动解包 jar、资源或 native 库 |
 | 网络 | SDK 轻量网络层,基于 Android 平台能力实现;覆盖异步执行、超时、有限重试、必要取消、响应解析、错误归一和诊断日志 |
