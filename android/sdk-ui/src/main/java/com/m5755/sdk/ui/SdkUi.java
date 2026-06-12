@@ -148,6 +148,358 @@ public final class SdkUi implements FlowUi {
         });
     }
 
+    // ===== 里程碑 2 界面(#16-#18) =====
+
+    @Override
+    public void showRealName() {
+        main.post(new Runnable() {
+            public void run() {
+                mountRealName();
+            }
+        });
+    }
+
+    @Override
+    public void showRealNameError(final String reason, final String message) {
+        main.post(new Runnable() {
+            public void run() {
+                toast(message == null ? "实名信息格式有误" : message);
+            }
+        });
+    }
+
+    @Override
+    public void showAntiAddictionBlocked(final String message) {
+        main.post(new Runnable() {
+            public void run() {
+                mountSimpleNotice("防沉迷提示",
+                        (message == null || message.isEmpty()) ? "当前账号受防沉迷限制,暂不能进入游戏。" : message);
+            }
+        });
+    }
+
+    @Override
+    public void showSubaccountPicker(final Results.SubaccountList list, final String nickname, final boolean switchFlow) {
+        main.post(new Runnable() {
+            public void run() {
+                mountPicker(list, nickname, switchFlow);
+            }
+        });
+    }
+
+    @Override
+    public void showAutoEnterPrompt(final String account, final String displayName) {
+        main.post(new Runnable() {
+            public void run() {
+                mountAutoEnter(account, displayName);
+            }
+        });
+    }
+
+    @Override
+    public void showPickerNotice(final String message) {
+        main.post(new Runnable() {
+            public void run() {
+                toast(message);
+            }
+        });
+    }
+
+    @Override
+    public void showSessionCheck(final String account, final String maskedToken) {
+        main.post(new Runnable() {
+            public void run() {
+                mountSessionCheck(account, maskedToken);
+            }
+        });
+    }
+
+    @Override
+    public void showFlowBlocked(final String reason, final String message) {
+        android.util.Log.i("M5755Sdk", "flow_blocked reason=" + reason);
+        main.post(new Runnable() {
+            public void run() {
+                dismiss();
+                toast(message == null ? "平台暂不可用,请稍后再试" : message);
+            }
+        });
+    }
+
+    private void mountRealName() {
+        LinearLayout card = UiKit.modalCard(host, 420);
+        card.addView(UiKit.title(host, "实名认证"));
+        LinearLayout.LayoutParams hintLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        hintLp.topMargin = UiKit.dp(host, 14);
+        card.addView(UiKit.hint(host, "根据相关规定,使用网络游戏须完成实名认证;信息仅用于合规校验。"), hintLp);
+        final android.widget.EditText name = UiKit.input(host, "请输入真实姓名");
+        card.addView(name);
+        final android.widget.EditText idNo = UiKit.input(host, "请输入身份证号");
+        card.addView(idNo);
+        TextView submit = UiKit.primaryButton(host, "提交");
+        card.addView(submit);
+        submit.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                final String n = name.getText().toString().trim();
+                final String id = idNo.getText().toString().trim();
+                if (n.isEmpty()) {
+                    toast("请输入真实姓名");
+                    return;
+                }
+                if (id.isEmpty()) {
+                    toast("请输入身份证号");
+                    return;
+                }
+                background.execute(new Runnable() {
+                    public void run() {
+                        controller.submitRealName(n, id);
+                    }
+                });
+            }
+        });
+        mount(card);
+    }
+
+    private void mountSimpleNotice(String title, String body) {
+        LinearLayout card = UiKit.modalCard(host, 420);
+        card.addView(UiKit.title(host, title));
+        LinearLayout.LayoutParams hintLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        hintLp.topMargin = UiKit.dp(host, 14);
+        card.addView(UiKit.hint(host, body), hintLp);
+        TextView ok = UiKit.primaryButton(host, "我知道了");
+        card.addView(ok);
+        ok.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                dismiss();
+            }
+        });
+        mount(card);
+    }
+
+    private void mountPicker(final Results.SubaccountList list, String nickname, final boolean switchFlow) {
+        LinearLayout card = UiKit.modalCard(host, 560);
+        // 头部:昵称 + 关闭
+        LinearLayout header = new LinearLayout(host);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        TextView nick = new TextView(host);
+        nick.setText(nickname == null || nickname.isEmpty() ? "5755玩家" : nickname);
+        nick.setTextSize(17);
+        nick.setTextColor(UiKit.TEXT);
+        nick.getPaint().setFakeBoldText(true);
+        header.addView(nick, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        TextView close = new TextView(host);
+        close.setText("×");
+        close.setTextSize(22);
+        close.setTextColor(0xFFA4A8B0);
+        close.setGravity(Gravity.CENTER);
+        close.setWidth(UiKit.dp(host, 42));
+        close.setHeight(UiKit.dp(host, 42));
+        close.setBackground(UiKit.roundedStroke(UiKit.WHITE, UiKit.dp(host, 21), 0xFFDEE1E8, UiKit.dp(host, 1)));
+        header.addView(close);
+        card.addView(header, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 52)));
+        close.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                dismiss(); // 登录链路=进入未完成;切换链路=取消保持当前(03 §4.4)
+                background.execute(new Runnable() {
+                    public void run() {
+                        controller.onPickerClosed(switchFlow);
+                    }
+                });
+            }
+        });
+
+        // 标题行 + 添加小号
+        LinearLayout titleRow = new LinearLayout(host);
+        titleRow.setOrientation(LinearLayout.HORIZONTAL);
+        titleRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView st = new TextView(host);
+        st.setText("选择小号进入游戏");
+        st.setTextSize(15);
+        st.setTextColor(UiKit.TEXT);
+        st.getPaint().setFakeBoldText(true);
+        titleRow.addView(st, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        TextView add = new TextView(host);
+        add.setText("添加小号");
+        add.setTextSize(13);
+        add.setTextColor(UiKit.PRIMARY_DEEP);
+        add.getPaint().setFakeBoldText(true);
+        add.setGravity(Gravity.CENTER);
+        add.setPadding(UiKit.dp(host, 14), UiKit.dp(host, 6), UiKit.dp(host, 14), UiKit.dp(host, 6));
+        add.setBackground(UiKit.roundedStroke(0x00000000, UiKit.dp(host, 8), UiKit.PRIMARY_DEEP, UiKit.dp(host, 1)));
+        titleRow.addView(add);
+        LinearLayout.LayoutParams trLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        trLp.topMargin = UiKit.dp(host, 10);
+        card.addView(titleRow, trLp);
+        add.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                background.execute(new Runnable() {
+                    public void run() {
+                        controller.onAddSubaccount(switchFlow);
+                    }
+                });
+            }
+        });
+
+        // 列表(可滚动,300dp 上限)
+        android.widget.ScrollView scroll = new android.widget.ScrollView(host);
+        LinearLayout rows = new LinearLayout(host);
+        rows.setOrientation(LinearLayout.VERTICAL);
+        scroll.addView(rows);
+        for (final Results.SubaccountList.Item it : list.items) {
+            LinearLayout row = new LinearLayout(host);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setBackground(UiKit.rounded(UiKit.WHITE, UiKit.dp(host, 8)));
+            row.setPadding(UiKit.dp(host, 14), 0, UiKit.dp(host, 10), 0);
+            TextView nameTv = new TextView(host);
+            nameTv.setText(it.displayName);
+            nameTv.setTextSize(14);
+            nameTv.setTextColor(UiKit.TEXT);
+            nameTv.getPaint().setFakeBoldText(true);
+            row.addView(nameTv, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+            final TextView badge = new TextView(host);
+            badge.setText(it.isDefault ? "✓ 默认" : "默认");
+            badge.setTextSize(12);
+            badge.setGravity(Gravity.CENTER);
+            badge.setPadding(UiKit.dp(host, 10), UiKit.dp(host, 4), UiKit.dp(host, 10), UiKit.dp(host, 4));
+            if (it.isDefault) {
+                badge.setTextColor(UiKit.BTN_TEXT_ON_PRIMARY);
+                badge.setBackground(UiKit.rounded(UiKit.PRIMARY, UiKit.dp(host, 999)));
+            } else {
+                badge.setTextColor(UiKit.MUTED);
+                badge.setBackground(UiKit.roundedStroke(UiKit.WHITE, UiKit.dp(host, 999), 0xFFD5D7DD, UiKit.dp(host, 1)));
+            }
+            row.addView(badge);
+            row.setClickable(true);
+            row.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    background.execute(new Runnable() {
+                        public void run() {
+                            controller.onSubaccountChosen(it.account, switchFlow);
+                        }
+                    });
+                }
+            });
+            badge.setOnClickListener(new View.OnClickListener() {
+                public void onClick(View v) {
+                    background.execute(new Runnable() {
+                        public void run() {
+                            controller.onSetDefault(it.account, switchFlow); // 点默认标签≠点行进入
+                        }
+                    });
+                }
+            });
+            LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 52));
+            rowLp.topMargin = UiKit.dp(host, 8);
+            rows.addView(row, rowLp);
+        }
+        LinearLayout.LayoutParams scLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        scroll.setBackground(UiKit.rounded(UiKit.WEAK, UiKit.dp(host, 10)));
+        scroll.setPadding(UiKit.dp(host, 6), UiKit.dp(host, 2), UiKit.dp(host, 6), UiKit.dp(host, 8));
+        scLp.topMargin = UiKit.dp(host, 10);
+        int maxH = UiKit.dp(host, 300);
+        scLp.height = Math.min(maxH, UiKit.dp(host, 60) * Math.max(1, list.items.size()));
+        card.addView(scroll, scLp);
+
+        TextView tip = new TextView(host);
+        tip.setText("点击小号进入游戏,点击「默认」设为下次自动登录的小号。");
+        tip.setTextSize(12);
+        tip.setTextColor(UiKit.MUTED);
+        LinearLayout.LayoutParams tipLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        tipLp.topMargin = UiKit.dp(host, 12);
+        card.addView(tip, tipLp);
+
+        mount(card);
+    }
+
+    private void mountAutoEnter(final String account, String displayName) {
+        // 轻量提示条(07 §6):非模态、距顶 44dp、1800ms 后自动进入
+        dismiss();
+        final FrameLayout layer = new FrameLayout(host);
+        layer.setClickable(false);
+        LinearLayout bar = new LinearLayout(host);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setBackground(UiKit.rounded(0xEEF7F8FA, UiKit.dp(host, 12)));
+        bar.setElevation(UiKit.dp(host, 10));
+        bar.setPadding(UiKit.dp(host, 18), 0, UiKit.dp(host, 10), 0);
+        TextView text = new TextView(host);
+        text.setText("将以「" + displayName + "」进入游戏");
+        text.setTextSize(15);
+        text.setTextColor(UiKit.TEXT);
+        text.getPaint().setFakeBoldText(true);
+        bar.addView(text, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        TextView switchBtn = new TextView(host);
+        switchBtn.setText("切换");
+        switchBtn.setTextSize(14);
+        switchBtn.setTextColor(UiKit.PRIMARY_DEEP);
+        switchBtn.getPaint().setFakeBoldText(true);
+        switchBtn.setPadding(UiKit.dp(host, 12), UiKit.dp(host, 8), UiKit.dp(host, 12), UiKit.dp(host, 8));
+        bar.addView(switchBtn);
+        FrameLayout.LayoutParams barLp = new FrameLayout.LayoutParams(
+                UiKit.dp(host, 420), UiKit.dp(host, 60));
+        barLp.gravity = Gravity.TOP | Gravity.CENTER_HORIZONTAL;
+        barLp.topMargin = UiKit.dp(host, 44);
+        layer.addView(bar, barLp);
+        ViewGroup root = (ViewGroup) host.findViewById(android.R.id.content);
+        root.addView(layer, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        overlay = layer;
+
+        final Runnable proceed = new Runnable() {
+            public void run() {
+                dismiss();
+                background.execute(new Runnable() {
+                    public void run() {
+                        controller.onAutoEnterElapsed(account);
+                    }
+                });
+            }
+        };
+        main.postDelayed(proceed, 1800);
+        switchBtn.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                main.removeCallbacks(proceed);
+                dismiss();
+                background.execute(new Runnable() {
+                    public void run() {
+                        controller.onAutoEnterSwitch();
+                    }
+                });
+            }
+        });
+    }
+
+    private void mountSessionCheck(String account, String maskedToken) {
+        LinearLayout card = UiKit.modalCard(host, 420);
+        card.addView(UiKit.title(host, "登录态校验"));
+        TextView status = new TextView(host);
+        status.setText("登录态校验通过");
+        status.setTextSize(18);
+        status.setTextColor(UiKit.TEXT);
+        status.getPaint().setFakeBoldText(true);
+        status.setGravity(Gravity.CENTER);
+        status.setBackground(UiKit.rounded(0xFFFFF9DF, UiKit.dp(host, 8)));
+        LinearLayout.LayoutParams stLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 52));
+        stLp.topMargin = UiKit.dp(host, 14);
+        card.addView(status, stLp);
+        TextView detail = UiKit.hint(host, "当前游戏小号:" + account + "\n登录令牌:" + maskedToken
+                + "\n游戏服务端将使用以上凭据完成登录态校验。");
+        LinearLayout.LayoutParams dLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        dLp.topMargin = UiKit.dp(host, 14);
+        card.addView(detail, dLp);
+        TextView ok = UiKit.primaryButton(host, "进入游戏");
+        card.addView(ok);
+        ok.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                dismiss();
+            }
+        });
+        mount(card);
+    }
+
     // ===== 模态构建 =====
 
     private void mountProtocol() {

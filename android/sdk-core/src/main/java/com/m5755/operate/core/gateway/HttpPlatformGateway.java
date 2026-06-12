@@ -130,6 +130,175 @@ public final class HttpPlatformGateway implements PlatformGateway {
         return out;
     }
 
+    // ===== 里程碑 2 端点(#15-#18) =====
+
+    private static final String H_PLATFORM_TOKEN = "X-M5755-Platform-Token";
+
+    @Override
+    public Results.AccountCheck checkAccount(String gameId, String platformAccountId, String platformToken) {
+        Results.AccountCheck out = new Results.AccountCheck();
+        try {
+            String query = query("gameId", gameId, "platformAccountId", platformAccountId);
+            Response r = callH("GET", "/api/sdk/v2/account-sessions", query, null, H_PLATFORM_TOKEN, platformToken);
+            out.ok = r.success;
+            out.reason = r.reason;
+            out.message = r.message;
+            if (r.data != null) {
+                out.valid = r.data.optBoolean("valid", false);
+                out.displayName = r.data.optString("displayName", "");
+            }
+        } catch (Exception e) {
+            out.ok = false;
+            out.reason = Reason.PLATFORM_UNAVAILABLE;
+            out.message = "网络或解析失败";
+        }
+        return out;
+    }
+
+    private Results.RealName parseRealName(Response r) {
+        Results.RealName out = new Results.RealName();
+        out.ok = r.success;
+        out.reason = r.reason;
+        out.message = r.message;
+        if (r.data != null) {
+            out.verified = r.data.optBoolean("verified", false);
+            out.adult = r.data.optBoolean("adult", false);
+            out.entryBlocked = r.data.optBoolean("antiAddictionEntryBlocked", false);
+            out.paymentBlocked = r.data.optBoolean("antiAddictionPaymentBlocked", false);
+        }
+        return out;
+    }
+
+    @Override
+    public Results.RealName getRealName(String gameId, String platformAccountId, String platformToken) {
+        try {
+            String query = query("gameId", gameId, "platformAccountId", platformAccountId);
+            return parseRealName(callH("GET", "/api/sdk/v2/real-name", query, null, H_PLATFORM_TOKEN, platformToken));
+        } catch (Exception e) {
+            return failRealName();
+        }
+    }
+
+    @Override
+    public Results.RealName submitRealName(String gameId, String platformAccountId, String platformToken,
+                                           String realName, String idNumber) {
+        try {
+            JSONObject body = new JSONObject();
+            body.put("gameId", gameId);
+            body.put("platformAccountId", platformAccountId);
+            body.put("platformToken", platformToken);
+            body.put("realName", realName);
+            body.put("idNumber", idNumber);
+            return parseRealName(call("POST", "/api/sdk/v2/real-name", "", body.toString()));
+        } catch (Exception e) {
+            return failRealName();
+        }
+    }
+
+    private static Results.RealName failRealName() {
+        Results.RealName out = new Results.RealName();
+        out.ok = false;
+        out.reason = Reason.PLATFORM_UNAVAILABLE;
+        out.message = "网络或解析失败";
+        return out;
+    }
+
+    @Override
+    public Results.SubaccountList listSubaccounts(String gameId, String platformAccountId, String platformToken) {
+        Results.SubaccountList out = new Results.SubaccountList();
+        try {
+            String query = query("gameId", gameId, "platformAccountId", platformAccountId);
+            Response r = callH("GET", "/api/sdk/v2/subaccounts", query, null, H_PLATFORM_TOKEN, platformToken);
+            out.ok = r.success;
+            out.reason = r.reason;
+            out.message = r.message;
+            if (r.data != null) {
+                out.defaultAccount = r.data.isNull("defaultAccount") ? "" : r.data.optString("defaultAccount", "");
+                org.json.JSONArray arr = r.data.optJSONArray("subaccounts");
+                if (arr != null) {
+                    for (int i = 0; i < arr.length(); i++) {
+                        JSONObject o = arr.optJSONObject(i);
+                        if (o == null) {
+                            continue;
+                        }
+                        Results.SubaccountList.Item it = new Results.SubaccountList.Item();
+                        it.account = o.optString("account", "");
+                        it.displayName = o.optString("displayName", "");
+                        it.isDefault = o.optBoolean("isDefault", false);
+                        out.items.add(it);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            out.ok = false;
+            out.reason = Reason.PLATFORM_UNAVAILABLE;
+            out.message = "网络或解析失败";
+        }
+        return out;
+    }
+
+    private Results.SubaccountOp subaccountOp(String method, String path, String gameId,
+                                              String platformAccountId, String platformToken, String account) {
+        Results.SubaccountOp out = new Results.SubaccountOp();
+        try {
+            JSONObject body = new JSONObject();
+            body.put("gameId", gameId);
+            body.put("platformAccountId", platformAccountId);
+            body.put("platformToken", platformToken);
+            if (account != null) {
+                body.put("account", account);
+            }
+            Response r = call(method, path, "", body.toString());
+            out.ok = r.success;
+            out.reason = r.reason;
+            out.message = r.message;
+            if (r.data != null) {
+                out.account = r.data.optString("account", "");
+                out.displayName = r.data.optString("displayName", "");
+            }
+        } catch (Exception e) {
+            out.ok = false;
+            out.reason = Reason.PLATFORM_UNAVAILABLE;
+            out.message = "网络或解析失败";
+        }
+        return out;
+    }
+
+    @Override
+    public Results.SubaccountOp createSubaccount(String gameId, String platformAccountId, String platformToken) {
+        return subaccountOp("POST", "/api/sdk/v2/subaccounts", gameId, platformAccountId, platformToken, null);
+    }
+
+    @Override
+    public Results.SubaccountOp setDefaultSubaccount(String gameId, String platformAccountId, String platformToken, String account) {
+        return subaccountOp("PUT", "/api/sdk/v2/subaccounts/default", gameId, platformAccountId, platformToken, account);
+    }
+
+    @Override
+    public Results.SubaccountLogin loginSubaccount(String gameId, String platformAccountId, String platformToken, String account) {
+        Results.SubaccountLogin out = new Results.SubaccountLogin();
+        try {
+            JSONObject body = new JSONObject();
+            body.put("gameId", gameId);
+            body.put("platformAccountId", platformAccountId);
+            body.put("platformToken", platformToken);
+            body.put("account", account);
+            Response r = call("POST", "/api/sdk/v2/subaccount-sessions", "", body.toString());
+            out.ok = r.success;
+            out.reason = r.reason;
+            out.message = r.message;
+            if (r.data != null) {
+                out.account = r.data.optString("account", "");
+                out.token = r.data.optString("token", "");
+            }
+        } catch (Exception e) {
+            out.ok = false;
+            out.reason = Reason.PLATFORM_UNAVAILABLE;
+            out.message = "网络或解析失败";
+        }
+        return out;
+    }
+
     // ---- 内部 ----
 
     private static final class Response {
@@ -140,6 +309,11 @@ public final class HttpPlatformGateway implements PlatformGateway {
     }
 
     private Response call(String method, String path, String query, String body) throws IOException {
+        return callH(method, path, query, body, null, null);
+    }
+
+    private Response callH(String method, String path, String query, String body,
+                           String credHeader, String credValue) throws IOException {
         long ts = System.currentTimeMillis() / 1000L;
         byte[] bodyBytes = body == null ? null : body.getBytes(UTF8);
         String canonical = Signer.canonical(method, path, query, String.valueOf(ts), body);
@@ -156,6 +330,9 @@ public final class HttpPlatformGateway implements PlatformGateway {
         conn.setRequestProperty(Signer.HEADER_SIGNATURE, sig);
         conn.setRequestProperty("X-M5755-Artifact-Type", config.artifactType);
         conn.setRequestProperty("X-M5755-Platform-Env", config.platformEnv);
+        if (credHeader != null && credValue != null) {
+            conn.setRequestProperty(credHeader, credValue); // 凭据头不参与 canonical(04 §1.4)
+        }
         if (bodyBytes != null) {
             conn.setDoOutput(true);
             conn.setRequestProperty("Content-Type", "application/json; charset=UTF-8");

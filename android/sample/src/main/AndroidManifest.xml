@@ -8,8 +8,10 @@
         android:label="@string/app_name"
         android:usesCleartextTraffic="true"
         android:theme="@android:style/Theme.Material.Light.DarkActionBar">
+        <!-- 01 §6 游戏包规范:声明 configChanges,旋转不重建、SDK 层状态保留(07 §1.12) -->
         <activity
             android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

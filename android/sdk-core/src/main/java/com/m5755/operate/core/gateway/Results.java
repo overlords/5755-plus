@@ -48,4 +48,57 @@ public final class Results {
         /** 平台保障建档的首个游戏小号 ID(新用户)。 */
         public String firstAccount;
     }
+
+    /** 账户有效检查结果(#15)。ok=接口成功;valid=登录态是否有效(语义分层)。 */
+    public static final class AccountCheck {
+        public boolean ok;
+        public String reason;
+        public String message;
+        public boolean valid;
+        public String displayName;
+    }
+
+    /** 实名状态/提交结果(#16)。 */
+    public static final class RealName {
+        public boolean ok;
+        public String reason;
+        public String message;
+        public boolean verified;
+        public boolean adult;
+        public boolean entryBlocked;
+        public boolean paymentBlocked;
+    }
+
+    /** 游戏小号列表(#17)。 */
+    public static final class SubaccountList {
+        public boolean ok;
+        public String reason;
+        public String message;
+        public String defaultAccount;
+        public java.util.List<Item> items = new java.util.ArrayList<Item>();
+
+        public static final class Item {
+            public String account;
+            public String displayName;
+            public boolean isDefault;
+        }
+    }
+
+    /** 添加小号 / 设默认结果(#17)。 */
+    public static final class SubaccountOp {
+        public boolean ok;
+        public String reason;
+        public String message;
+        public String account;
+        public String displayName;
+    }
+
+    /** 小号登录结果(#18):account/token 只来自此处。 */
+    public static final class SubaccountLogin {
+        public boolean ok;
+        public String reason;
+        public String message;
+        public String account;
+        public String token;
+    }
 }

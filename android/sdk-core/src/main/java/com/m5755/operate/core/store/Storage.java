@@ -17,4 +17,16 @@ public interface Storage {
     void saveSession(String platformAccountId, String platformToken, String account);
 
     void clearSession();
+
+    String getPlatformAccountId();
+
+    String getPlatformToken();
+
+    /** 本地记录的当前游戏小号 ID(自动进入提示前置依据,不替代有效检查)。 */
+    String getAccount();
+
+    /** 小号登录成功后保存当前小号与小号令牌(#18)。 */
+    void saveSubaccount(String account, String subaccountToken);
+
+    String getSubaccountToken();
 }

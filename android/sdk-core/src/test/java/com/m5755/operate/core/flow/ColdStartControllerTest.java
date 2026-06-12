@@ -2,7 +2,6 @@ package com.m5755.operate.core.flow;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import com.m5755.operate.api.UserListener;
@@ -18,230 +17,490 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * 冷启动状态机的纯逻辑验证(无 Android 依赖),覆盖 #7/#8/#9 的关键规则。
- * 上线阻断回归仍以仪器化测试为准(ADR-0002);此处为快速反馈的开发期单测。
+ * 登录链路状态机纯逻辑验证(无 Android 依赖),覆盖 03 §3 阻断/回退矩阵的可单测部分。
  */
 public class ColdStartControllerTest {
 
-    // ---- 维护门禁阻断不触发账号变化(#9 核心) ----
+    // ===== 里程碑 1 既有规则 =====
+
     @Test
     public void maintenanceBlocksEntryWithoutAccountChange() {
-        FakeGateway gw = new FakeGateway();
-        gw.config.ok = true;
-        gw.config.maintenanceEnabled = true;
-        gw.config.maintenanceMessage = "维护中";
-        RecordingUi ui = new RecordingUi();
-        RecordingListener listener = new RecordingListener();
-        ColdStartController c = new ColdStartController(gw, new FakeStorage(), ui, listener);
-
-        c.start("m5755-demo", "1.0.0", "com.x");
-
-        assertTrue("应展示维护提示", ui.calls.contains("showMaintenance:维护中"));
-        assertFalse("维护时不应进入协议", ui.calls.contains("showProtocol"));
-        assertFalse("维护时不应进入登录窗口", ui.calls.contains("showLoginWindow"));
-        assertFalse("维护阻断绝不触发账号变化", listener.logoutCalled);
+        Fixture f = new Fixture();
+        f.gw.config.ok = true;
+        f.gw.config.maintenanceEnabled = true;
+        f.gw.config.maintenanceMessage = "维护中";
+        f.c.start("g", "1.0.0", "p");
+        assertTrue(f.ui.calls.contains("showMaintenance:维护中"));
+        assertFalse(f.ui.calls.contains("showLoginWindow"));
+        assertFalse("维护阻断绝不触发账号变化", f.listener.logoutCalled);
     }
 
-    // ---- init 阻断型失败时不进入协议或登录 ----
     @Test
     public void initFailureBlocksBeforeProtocol() {
-        FakeGateway gw = new FakeGateway();
-        gw.config.ok = false;
-        gw.config.reason = "param_invalid";
-        RecordingUi ui = new RecordingUi();
-        ColdStartController c = new ColdStartController(gw, new FakeStorage(), ui, new RecordingListener());
-
-        c.start("nope", "1.0.0", "com.x");
-
-        assertTrue(ui.calls.contains("showInitError:param_invalid"));
-        assertFalse(ui.calls.contains("showProtocol"));
-        assertFalse(ui.calls.contains("showLoginWindow"));
+        Fixture f = new Fixture();
+        f.gw.config.ok = false;
+        f.gw.config.reason = "param_invalid";
+        f.c.start("g", "1.0.0", "p");
+        assertTrue(f.ui.calls.contains("showInitError:param_invalid"));
+        assertFalse(f.ui.calls.contains("showProtocol"));
     }
 
-    // ---- 全新安装:展示协议,同意后进入登录窗口 ----
     @Test
     public void freshInstallShowsProtocolThenLogin() {
-        FakeGateway gw = new FakeGateway();
-        gw.config.ok = true;
-        gw.config.protocolVersion = "1";
-        RecordingUi ui = new RecordingUi();
-        FakeStorage store = new FakeStorage();
-        ColdStartController c = new ColdStartController(gw, store, ui, new RecordingListener());
-
-        c.start("m5755-demo", "1.0.0", "com.x");
-        assertTrue(ui.calls.contains("showProtocol:1"));
-        assertFalse("未同意前不进登录窗口", ui.calls.contains("showLoginWindow"));
-
-        c.onProtocolConsented();
-        assertTrue("已同意应记录", store.isProtocolConsented("1"));
-        assertTrue(ui.calls.contains("showLoginWindow"));
+        Fixture f = new Fixture();
+        f.gw.config.ok = true;
+        f.gw.config.protocolVersion = "1";
+        f.c.start("g", "1.0.0", "p");
+        assertTrue(f.ui.calls.contains("showProtocol:1"));
+        f.c.onProtocolConsented();
+        assertTrue(f.store.isProtocolConsented("1"));
+        assertTrue(f.ui.calls.contains("showLoginWindow"));
     }
 
-    // ---- 已同意协议:直接到达登录窗口,不重复展示协议 ----
-    @Test
-    public void consentedInstallReachesLoginDirectly() {
-        FakeGateway gw = new FakeGateway();
-        gw.config.ok = true;
-        gw.config.protocolVersion = "1";
-        FakeStorage store = new FakeStorage();
-        store.setProtocolConsented("1");
-        RecordingUi ui = new RecordingUi();
-        ColdStartController c = new ColdStartController(gw, store, ui, new RecordingListener());
-
-        c.start("m5755-demo", "1.0.0", "com.x");
-
-        assertFalse("同一安装内不重复协议告知", ui.calls.contains("showProtocol:1"));
-        assertTrue(ui.calls.contains("showLoginWindow"));
-    }
-
-    // ---- 协议拒绝:阻断进入,不触发账号变化 ----
     @Test
     public void protocolRejectDoesNotFireAccountChange() {
-        RecordingUi ui = new RecordingUi();
-        RecordingListener listener = new RecordingListener();
-        ColdStartController c = new ColdStartController(new FakeGateway(), new FakeStorage(), ui, listener);
-
-        c.onProtocolRejected();
-
-        assertTrue(ui.calls.contains("onEntryBlockedByProtocolReject"));
-        assertFalse("协议拒绝不触发账号变化", listener.logoutCalled);
+        Fixture f = new Fixture();
+        f.c.onProtocolRejected();
+        assertTrue(f.ui.calls.contains("onEntryBlockedByProtocolReject"));
+        assertFalse(f.listener.logoutCalled);
     }
 
-    // ---- devCode 登录成功:保存会话并回调成功(#8) ----
     @Test
-    public void loginSuccessSavesSession() {
-        FakeGateway gw = new FakeGateway();
-        gw.login.ok = true;
-        gw.login.platformAccountId = "pa_1";
-        gw.login.platformToken = "pt_1";
-        gw.login.firstAccount = "sub_1";
-        RecordingUi ui = new RecordingUi();
-        FakeStorage store = new FakeStorage();
-        ColdStartController c = new ColdStartController(gw, store, ui, new RecordingListener());
-
-        c.submitLogin("13800000000", "123456");
-
-        assertTrue(ui.calls.contains("onLoginSuccess"));
-        assertTrue("登录成功应保存会话", store.hasSession());
+    public void loginFailureShowsErrorNoSession() {
+        Fixture f = new Fixture();
+        f.gw.login.ok = false;
+        f.gw.login.reason = "sms_code_invalid";
+        f.c.submitLogin("13800000000", "000000");
+        assertTrue(f.ui.calls.contains("showLoginError:sms_code_invalid"));
+        assertFalse(f.store.hasSession());
     }
 
-    // ---- 验证码错误:提示并允许重试,不保存会话(#8) ----
+    // ===== #15 自动登录 =====
+
     @Test
-    public void invalidCodeShowsErrorNoSession() {
-        FakeGateway gw = new FakeGateway();
-        gw.login.ok = false;
-        gw.login.reason = "sms_code_invalid";
-        RecordingUi ui = new RecordingUi();
-        FakeStorage store = new FakeStorage();
-        ColdStartController c = new ColdStartController(gw, store, ui, new RecordingListener());
-
-        c.submitLogin("13800000000", "000000");
-
-        assertTrue(ui.calls.contains("showLoginError:sms_code_invalid"));
-        assertFalse("登录失败不应保存会话", store.hasSession());
+    public void autoLoginValidSkipsLoginWindow() {
+        Fixture f = consentedWithSession();
+        f.gw.check.ok = true;
+        f.gw.check.valid = true;
+        f.gw.realName.ok = true;
+        f.gw.realName.verified = true;
+        f.gw.list.ok = true;
+        f.gw.list.items.add(item("sub_1", "小号1", false));
+        f.c.start("g", "1.0.0", "p");
+        assertFalse("有效会话不应弹登录窗", f.ui.calls.contains("showLoginWindow"));
+        assertTrue("应直达小号选择", f.ui.calls.contains("showSubaccountPicker"));
     }
 
-    // ===== 内存假实现 =====
+    @Test
+    public void autoLoginInvalidClearsAndShowsWindow() {
+        Fixture f = consentedWithSession();
+        f.store.saveSubaccount("sub_1", "st_1"); // 曾有当前小号
+        f.gw.check.ok = true;
+        f.gw.check.valid = false;
+        f.c.start("g", "1.0.0", "p");
+        assertTrue(f.ui.calls.contains("showLoginWindow"));
+        assertFalse("会话应被清理", f.store.hasSession());
+        assertTrue("账户失效且需清理小号 → 账号变化", f.listener.logoutCalled);
+    }
+
+    @Test
+    public void autoLoginPlatformUnavailableBlocksWithoutMisjudging() {
+        Fixture f = consentedWithSession();
+        f.gw.check.ok = false;
+        f.gw.check.reason = "platform_unavailable";
+        f.c.start("g", "1.0.0", "p");
+        assertTrue(f.ui.calls.contains("showFlowBlocked:platform_unavailable"));
+        assertFalse("平台不可用不得误判失效", f.listener.logoutCalled);
+        assertTrue("本地会话应保留", f.store.hasSession());
+        assertFalse("不得本地放行", f.ui.calls.contains("showSubaccountPicker"));
+    }
+
+    // ===== #16 实名 + 门禁 =====
+
+    @Test
+    public void unverifiedAccountEntersRealName() {
+        Fixture f = loggedIn();
+        f.gw.realName.ok = true;
+        f.gw.realName.verified = false;
+        f.c.submitLogin("13800000000", "123456");
+        assertTrue(f.ui.calls.contains("showRealName"));
+    }
+
+    @Test
+    public void realNameSubmitContinuesWithoutRelogin() {
+        Fixture f = loggedIn();
+        f.gw.realNameSubmit.ok = true;
+        f.gw.realNameSubmit.verified = true;
+        f.gw.list.ok = true;
+        f.gw.list.items.add(item("sub_1", "小号1", false));
+        f.c.submitRealName("张三", "11010119900101001X");
+        assertTrue("实名通过应继续小号流程", f.ui.calls.contains("showSubaccountPicker"));
+        assertFalse("不应回登录窗", f.ui.calls.contains("showLoginWindow"));
+    }
+
+    @Test
+    public void antiAddictionEntryBlockedNoAccountChange() {
+        Fixture f = loggedIn();
+        f.gw.realName.ok = true;
+        f.gw.realName.verified = true;
+        f.gw.realName.entryBlocked = true;
+        f.c.submitLogin("13800000000", "123456");
+        assertTrue(f.ui.calls.contains("showAntiAddictionBlocked"));
+        assertFalse("门禁阻断不触发账号变化", f.listener.logoutCalled);
+        assertFalse(f.ui.calls.contains("showLoginWindow"));
+    }
+
+    // ===== #17 小号分支 =====
+
+    @Test
+    public void emptyListBlocksWithoutFabrication() {
+        Fixture f = loggedIn();
+        f.gw.realName.ok = true;
+        f.gw.realName.verified = true;
+        f.gw.list.ok = true; // 空列表
+        f.c.submitLogin("13800000000", "123456");
+        assertTrue(f.ui.calls.contains("showFlowBlocked:subaccount_list_empty"));
+        assertFalse(f.ui.calls.contains("showSubaccountPicker"));
+    }
+
+    @Test
+    public void defaultAccountShowsAutoEnterPrompt() {
+        Fixture f = loggedIn();
+        f.gw.realName.ok = true;
+        f.gw.realName.verified = true;
+        f.gw.list.ok = true;
+        f.gw.list.defaultAccount = "sub_1";
+        f.gw.list.items.add(item("sub_1", "小号1", true));
+        f.c.submitLogin("13800000000", "123456");
+        assertTrue(f.ui.calls.contains("showAutoEnterPrompt:sub_1"));
+        assertFalse("有默认不展示完整选择页", f.ui.calls.contains("showSubaccountPicker"));
+    }
+
+    @Test
+    public void switchFlowNeverShowsAutoEnter() {
+        Fixture f = loggedIn();
+        f.store.saveSubaccount("sub_1", "st_1");
+        f.gw.list.ok = true;
+        f.gw.list.defaultAccount = "sub_1";
+        f.gw.list.items.add(item("sub_1", "小号1", true));
+        assertTrue(f.c.changeUser());
+        assertTrue("切换链路必须进完整选择页", f.ui.calls.contains("showSubaccountPicker"));
+        assertFalse("切换不展示自动进入提示", f.ui.calls.contains("showAutoEnterPrompt:sub_1"));
+    }
+
+    @Test
+    public void changeUserWithoutCurrentAccountRefused() {
+        Fixture f = loggedIn(); // 有会话但无当前小号
+        assertFalse("没有当前小号不得隐式触发切换", f.c.changeUser());
+        assertFalse(f.ui.calls.contains("showSubaccountPicker"));
+    }
+
+    // ===== #18 小号登录与分流 =====
+
+    @Test
+    public void subaccountLoginSuccessDeliversUser() {
+        Fixture f = loggedIn();
+        f.gw.subLogin.ok = true;
+        f.gw.subLogin.account = "sub_1";
+        f.gw.subLogin.token = "st_token_123456";
+        f.c.onSubaccountChosen("sub_1", false);
+        assertEquals("sub_1", f.flow.account);
+        assertEquals("st_token_123456", f.flow.token);
+        assertTrue("应展示登录态校验弹窗", f.ui.calls.contains("showSessionCheck:sub_1"));
+        assertEquals("sub_1", f.store.getAccount());
+    }
+
+    @Test
+    public void subaccountInvalidRoutesBackToPicker() {
+        Fixture f = loggedIn();
+        f.gw.subLogin.ok = false;
+        f.gw.subLogin.reason = "subaccount_invalid";
+        f.gw.list.ok = true;
+        f.gw.list.items.add(item("sub_2", "小号2", false));
+        f.c.onSubaccountChosen("sub_1", false);
+        assertTrue("小号失效进选择页", f.ui.calls.contains("showSubaccountPicker"));
+        assertFalse("不回登录窗(03 §3 分流)", f.ui.calls.contains("showLoginWindow"));
+        assertTrue("小号失效属账号变化", f.listener.logoutCalled);
+    }
+
+    @Test
+    public void platformAccountInvalidRoutesToLoginWindow() {
+        Fixture f = loggedIn();
+        f.gw.subLogin.ok = false;
+        f.gw.subLogin.reason = "platform_account_invalid";
+        f.c.onSubaccountChosen("sub_1", false);
+        assertTrue("账户失效回登录窗", f.ui.calls.contains("showLoginWindow"));
+        assertFalse("不进选择页(03 §3 分流)", f.ui.calls.contains("showSubaccountPicker"));
+        assertTrue(f.listener.logoutCalled);
+        assertFalse(f.store.hasSession());
+    }
+
+    @Test
+    public void logoutClearsAndShowsWindowWithoutProtocol() {
+        Fixture f = loggedIn();
+        f.store.setProtocolConsented("1");
+        f.c.logout();
+        assertTrue(f.ui.calls.contains("showLoginWindow"));
+        assertTrue(f.listener.logoutCalled);
+        assertFalse(f.store.hasSession());
+        assertFalse("登出不重复协议告知", f.ui.calls.contains("showProtocol:1"));
+    }
+
+    @Test
+    public void addSubaccountLimitShowsNotice() {
+        Fixture f = loggedIn();
+        f.gw.createOp.ok = false;
+        f.gw.createOp.reason = "subaccount_limit_reached";
+        f.c.onAddSubaccount(false);
+        assertTrue(f.ui.calls.contains("showPickerNotice"));
+        assertFalse(f.listener.logoutCalled);
+    }
+
+    // ===== 夹具 =====
+
+    private static Results.SubaccountList.Item item(String account, String name, boolean dft) {
+        Results.SubaccountList.Item it = new Results.SubaccountList.Item();
+        it.account = account;
+        it.displayName = name;
+        it.isDefault = dft;
+        return it;
+    }
+
+    /** 已同意协议 + 有本地会话(自动登录场景)。 */
+    private static Fixture consentedWithSession() {
+        Fixture f = new Fixture();
+        f.gw.config.ok = true;
+        f.gw.config.protocolVersion = "1";
+        f.store.setProtocolConsented("1");
+        f.store.saveSession("pa_1", "pt_1", null);
+        return f;
+    }
+
+    /** 已 init + 已有账户会话(登录后阶段);login 网关默认成功。 */
+    private static Fixture loggedIn() {
+        Fixture f = new Fixture();
+        f.gw.config.ok = true;
+        f.gw.config.protocolVersion = "1";
+        f.c.init("g", "1.0.0", "p");
+        f.store.saveSession("pa_1", "pt_1", null);
+        f.gw.login.ok = true;
+        f.gw.login.platformAccountId = "pa_1";
+        f.gw.login.platformToken = "pt_1";
+        return f;
+    }
+
+    static final class Fixture {
+        final FakeGateway gw = new FakeGateway();
+        final FakeStorage store = new FakeStorage();
+        final RecordingUi ui = new RecordingUi();
+        final RecordingListener listener = new RecordingListener();
+        final RecordingFlow flow = new RecordingFlow();
+        final ColdStartController c;
+
+        Fixture() {
+            c = new ColdStartController(gw, store, ui, listener);
+            c.setFlowListener(flow);
+        }
+    }
+
+    static final class RecordingFlow implements ColdStartController.FlowListener {
+        String account;
+        String token;
+        boolean canceled;
+        String blockedReason;
+
+        public void onFlowSuccess(String account, String token) {
+            this.account = account;
+            this.token = token;
+        }
+
+        public void onFlowCanceled() {
+            canceled = true;
+        }
+
+        public void onFlowBlocked(String reason, String message) {
+            blockedReason = reason;
+        }
+    }
 
     static final class FakeGateway implements PlatformGateway {
         final Results.Config config = new Results.Config();
         final Results.Sms sms = new Results.Sms();
         final Results.Login login = new Results.Login();
+        final Results.AccountCheck check = new Results.AccountCheck();
+        final Results.RealName realName = new Results.RealName();
+        final Results.RealName realNameSubmit = new Results.RealName();
+        final Results.SubaccountList list = new Results.SubaccountList();
+        final Results.SubaccountOp createOp = new Results.SubaccountOp();
+        final Results.SubaccountOp defaultOp = new Results.SubaccountOp();
+        final Results.SubaccountLogin subLogin = new Results.SubaccountLogin();
 
-        @Override
-        public Results.Config fetchConfig(String g, String v, String p, String c, String s) {
+        public Results.Config fetchConfig(String a, String b, String c, String d, String e) {
             return config;
         }
 
-        @Override
-        public Results.Sms requestSms(String g, String a) {
+        public Results.Sms requestSms(String a, String b) {
             return sms;
         }
 
-        @Override
-        public Results.Login login(String g, String a, String cr, String c, String s) {
+        public Results.Login login(String a, String b, String c, String d, String e) {
             return login;
+        }
+
+        public Results.AccountCheck checkAccount(String a, String b, String c) {
+            return check;
+        }
+
+        public Results.RealName getRealName(String a, String b, String c) {
+            return realName;
+        }
+
+        public Results.RealName submitRealName(String a, String b, String c, String d, String e) {
+            return realNameSubmit;
+        }
+
+        public Results.SubaccountList listSubaccounts(String a, String b, String c) {
+            return list;
+        }
+
+        public Results.SubaccountOp createSubaccount(String a, String b, String c) {
+            return createOp;
+        }
+
+        public Results.SubaccountOp setDefaultSubaccount(String a, String b, String c, String d) {
+            return defaultOp;
+        }
+
+        public Results.SubaccountLogin loginSubaccount(String a, String b, String c, String d) {
+            return subLogin;
         }
     }
 
     static final class FakeStorage implements Storage {
         private final Set<String> consented = new HashSet<>();
-        private boolean session;
+        private String paId;
+        private String pToken;
+        private String account;
+        private String subToken;
 
-        @Override
         public boolean isProtocolConsented(String v) {
             return consented.contains(v);
         }
 
-        @Override
         public void setProtocolConsented(String v) {
             consented.add(v);
         }
 
-        @Override
         public boolean hasSession() {
-            return session;
+            return pToken != null;
         }
 
-        @Override
-        public void saveSession(String pa, String pt, String account) {
-            session = true;
+        public void saveSession(String pa, String pt, String acc) {
+            paId = pa;
+            pToken = pt;
+            account = acc;
         }
 
-        @Override
         public void clearSession() {
-            session = false;
+            paId = null;
+            pToken = null;
+            account = null;
+            subToken = null;
+        }
+
+        public String getPlatformAccountId() {
+            return paId;
+        }
+
+        public String getPlatformToken() {
+            return pToken;
+        }
+
+        public String getAccount() {
+            return account;
+        }
+
+        public void saveSubaccount(String acc, String st) {
+            account = acc;
+            subToken = st;
+        }
+
+        public String getSubaccountToken() {
+            return subToken;
         }
     }
 
     static final class RecordingUi implements FlowUi {
         final List<String> calls = new ArrayList<>();
 
-        @Override
         public void showInitError(String reason, String message) {
             calls.add("showInitError:" + reason);
         }
 
-        @Override
         public void showMaintenance(String message) {
             calls.add("showMaintenance:" + message);
         }
 
-        @Override
-        public void showProtocol(String protocolVersion) {
-            calls.add("showProtocol:" + protocolVersion);
+        public void showProtocol(String v) {
+            calls.add("showProtocol:" + v);
         }
 
-        @Override
         public void showLoginWindow() {
             calls.add("showLoginWindow");
         }
 
-        @Override
-        public void onSmsRequested(Results.Sms result) {
+        public void onSmsRequested(Results.Sms r) {
             calls.add("onSmsRequested");
         }
 
-        @Override
         public void showLoginError(String reason, String message) {
             calls.add("showLoginError:" + reason);
         }
 
-        @Override
-        public void onLoginSuccess(Results.Login result) {
+        public void onLoginSuccess(Results.Login r) {
             calls.add("onLoginSuccess");
         }
 
-        @Override
         public void onEntryBlockedByProtocolReject() {
             calls.add("onEntryBlockedByProtocolReject");
+        }
+
+        public void showRealName() {
+            calls.add("showRealName");
+        }
+
+        public void showRealNameError(String reason, String message) {
+            calls.add("showRealNameError:" + reason);
+        }
+
+        public void showAntiAddictionBlocked(String message) {
+            calls.add("showAntiAddictionBlocked");
+        }
+
+        public void showSubaccountPicker(Results.SubaccountList list, String nick, boolean sw) {
+            calls.add("showSubaccountPicker");
+        }
+
+        public void showAutoEnterPrompt(String account, String name) {
+            calls.add("showAutoEnterPrompt:" + account);
+        }
+
+        public void showPickerNotice(String message) {
+            calls.add("showPickerNotice");
+        }
+
+        public void showSessionCheck(String account, String maskedToken) {
+            calls.add("showSessionCheck:" + account);
+        }
+
+        public void showFlowBlocked(String reason, String message) {
+            calls.add("showFlowBlocked:" + reason);
         }
     }
 
     static final class RecordingListener implements UserListener {
         boolean logoutCalled;
 
-        @Override
         public void onLogout() {
             logoutCalled = true;
         }

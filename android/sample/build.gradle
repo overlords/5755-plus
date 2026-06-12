@@ -12,6 +12,7 @@ android {
         targetSdk 36
         versionCode 1
         versionName "1.0"
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
@@ -28,4 +29,9 @@ android {
 
 dependencies {
     implementation project(":sdk")
+
+    // androidx.test 仅入测试编译路径(androidTestImplementation),交付 AAR 零 AndroidX。
+    androidTestImplementation "androidx.test:runner:1.6.2"
+    androidTestImplementation "androidx.test.ext:junit:1.2.1"
+    androidTestImplementation "androidx.test.uiautomator:uiautomator:2.3.0"
 }

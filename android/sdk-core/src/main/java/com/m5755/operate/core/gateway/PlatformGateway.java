@@ -14,4 +14,23 @@ public interface PlatformGateway {
 
     Results.Login login(String gameId, String loginAccount, String credential,
                         String channelId, String channelSource);
+
+    /** #15 账户有效检查(凭据走请求头)。 */
+    Results.AccountCheck checkAccount(String gameId, String platformAccountId, String platformToken);
+
+    /** #16 实名状态检查 / 提交。 */
+    Results.RealName getRealName(String gameId, String platformAccountId, String platformToken);
+
+    Results.RealName submitRealName(String gameId, String platformAccountId, String platformToken,
+                                    String realName, String idNumber);
+
+    /** #17 小号列表 / 添加 / 设默认。 */
+    Results.SubaccountList listSubaccounts(String gameId, String platformAccountId, String platformToken);
+
+    Results.SubaccountOp createSubaccount(String gameId, String platformAccountId, String platformToken);
+
+    Results.SubaccountOp setDefaultSubaccount(String gameId, String platformAccountId, String platformToken, String account);
+
+    /** #18 小号登录(签发游戏侧 account/token)。 */
+    Results.SubaccountLogin loginSubaccount(String gameId, String platformAccountId, String platformToken, String account);
 }

@@ -48,6 +48,33 @@ public final class SharedPrefsStorage implements Storage {
 
     @Override
     public void clearSession() {
-        sp.edit().remove(K_PA_ID).remove(K_TOKEN).remove(K_ACCOUNT).apply();
+        sp.edit().remove(K_PA_ID).remove(K_TOKEN).remove(K_ACCOUNT).remove(K_SUB_TOKEN).apply();
+    }
+
+    private static final String K_SUB_TOKEN = "sub_token";
+
+    @Override
+    public String getPlatformAccountId() {
+        return sp.getString(K_PA_ID, null);
+    }
+
+    @Override
+    public String getPlatformToken() {
+        return sp.getString(K_TOKEN, null);
+    }
+
+    @Override
+    public String getAccount() {
+        return sp.getString(K_ACCOUNT, null);
+    }
+
+    @Override
+    public void saveSubaccount(String account, String subaccountToken) {
+        sp.edit().putString(K_ACCOUNT, account).putString(K_SUB_TOKEN, subaccountToken).apply();
+    }
+
+    @Override
+    public String getSubaccountToken() {
+        return sp.getString(K_SUB_TOKEN, null);
     }
 }

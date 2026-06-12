@@ -6,27 +6,56 @@ import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
 import android.widget.LinearLayout;
+import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 
+import com.m5755.operate.api.DataListener;
+import com.m5755.operate.api.Listener;
 import com.m5755.operate.api.Operate;
+import com.m5755.operate.api.Options;
+import com.m5755.operate.api.User;
+import com.m5755.operate.api.UserListener;
 import com.m5755.operate.core.net.PlatformConfig;
 
 /**
- * 样例游戏宿主(非 SDK 范围)。点击「进入游戏」模拟 onGameStart → 调 SDK 冷启动切片。
+ * 样例游戏宿主(非 SDK 范围)。操作面板驱动公开 API:init → login → 用户信息/切换/登出。
  */
 public class MainActivity extends Activity {
 
     static final String GAME_ID = "m5755-demo";
 
+    private TextView status;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
+        // 验证用:intent extra baseUrl 指向本地/联调服务端;缺省走包内 assets 配置(sdk-dev)。
+        String baseUrl = getIntent().getStringExtra("baseUrl");
+        if (baseUrl != null && !baseUrl.isEmpty()) {
+            Operate.setPlatformConfigOverride(new PlatformConfig(baseUrl, "local", "local",
+                    "dev-test-key", "m5755-dev-public-test-secret-v1", "1.0.0"));
+        }
+
+        Operate.setUserListener(new UserListener() {
+            @Override
+            public void onLogout() {
+                runOnUiThread(new Runnable() {
+                    public void run() {
+                        setStatus("账号变化:已登出/失效");
+                    }
+                });
+            }
+        });
+
+        ScrollView scroll = new ScrollView(this);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setGravity(Gravity.CENTER);
-        int pad = dp(24);
+        root.setGravity(Gravity.CENTER_HORIZONTAL);
+        int pad = dp(20);
         root.setPadding(pad, pad, pad, pad);
+        scroll.addView(root);
 
         TextView title = new TextView(this);
         title.setText("5755 SDK 样例");
@@ -34,30 +63,97 @@ public class MainActivity extends Activity {
         title.setGravity(Gravity.CENTER);
         root.addView(title);
 
-        Button enter = new Button(this);
-        enter.setText("进入游戏(onGameStart)");
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT);
-        lp.topMargin = dp(24);
-        enter.setLayoutParams(lp);
-        enter.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                // 验证用:intent extra baseUrl 指向本地/联调服务端(如 http://10.0.2.2:18080);
-                // 缺省走包内 assets 配置(联调 sdk-dev)。
-                String baseUrl = getIntent().getStringExtra("baseUrl");
-                if (baseUrl != null && !baseUrl.isEmpty()) {
-                    PlatformConfig local = new PlatformConfig(baseUrl, "local", "local",
-                            "dev-test-key", "m5755-dev-public-test-secret-v1", "1.0.0");
-                    Operate.get().start(MainActivity.this, GAME_ID, local);
-                } else {
-                    Operate.get().start(MainActivity.this, GAME_ID);
-                }
+        status = new TextView(this);
+        status.setText("未初始化");
+        status.setTextSize(13);
+        status.setGravity(Gravity.CENTER);
+        status.setPadding(0, dp(8), 0, dp(8));
+        root.addView(status);
+
+        addButton(root, "进入游戏(onGameStart + init)", new Runnable() {
+            public void run() {
+                Operate.onGameStart(MainActivity.this);
+                Operate.init(MainActivity.this, new Options(GAME_ID), new Listener() {
+                    public void onResult(final boolean success, int code, final String message) {
+                        runOnUiThread(new Runnable() {
+                            public void run() {
+                                setStatus(success ? "init 成功,可登录" : "init 失败:" + message);
+                            }
+                        });
+                    }
+                });
             }
         });
-        root.addView(enter);
 
-        setContentView(root);
+        addButton(root, "登录(login)", new Runnable() {
+            public void run() {
+                Operate.login(MainActivity.this, new DataListener<User>() {
+                    public void onResult(final boolean success, int code, final String message, final User user) {
+                        runOnUiThread(new Runnable() {
+                            public void run() {
+                                setStatus(success
+                                        ? "登录成功 account=" + user.getAccount()
+                                        : "登录未完成:" + message);
+                            }
+                        });
+                    }
+                });
+            }
+        });
+
+        addButton(root, "用户信息(getUser)", new Runnable() {
+            public void run() {
+                User u = Operate.getUser();
+                toast(u == null ? "未登录" : "account=" + u.getAccount());
+            }
+        });
+
+        addButton(root, "切换小号(changeUser)", new Runnable() {
+            public void run() {
+                Operate.changeUser(MainActivity.this, new DataListener<User>() {
+                    public void onResult(final boolean success, int code, final String message, final User user) {
+                        runOnUiThread(new Runnable() {
+                            public void run() {
+                                setStatus(success ? "已切换 account=" + user.getAccount() : message);
+                            }
+                        });
+                    }
+                });
+            }
+        });
+
+        addButton(root, "登出(logout)", new Runnable() {
+            public void run() {
+                Operate.logout();
+            }
+        });
+
+        setContentView(scroll);
+    }
+
+    private void addButton(LinearLayout root, String text, final Runnable action) {
+        Button b = new Button(this);
+        b.setText(text);
+        b.setAllCaps(false);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                dp(320), LinearLayout.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(10);
+        b.setLayoutParams(lp);
+        b.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                action.run();
+            }
+        });
+        root.addView(b);
+    }
+
+    private void setStatus(String s) {
+        status.setText(s);
+    }
+
+    private void toast(String s) {
+        Toast.makeText(this, s, Toast.LENGTH_SHORT).show();
     }
 
     private int dp(int v) {
