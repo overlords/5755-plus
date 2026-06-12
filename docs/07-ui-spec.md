@@ -173,6 +173,20 @@ smallText 行距 +2dp;hint 行距 +3dp。粗体使用 `Typeface.DEFAULT` + `Type
 - **动效**:界面出现/消失无进出场动画(与旧实现一致);允许新增轻微淡入淡出,**禁止**弹跳、循环、装饰性动效。计时行为仅限:验证码 60s 倒计时、toast 1600ms、自动进入提示 1800ms。
 - 按压态 = 底色变暗(不缩放);禁用态 = 去饱和金色或灰色文字。
 
+### 1.12 屏幕方向适配(自设计系统并入,2026-06-12)
+
+宿主游戏横竖屏皆有,SDK 层必须双向可用;方向判定 = 当前可用宽 < 高即竖屏,**旋转时实时切换形态**(监听配置变化,不重建业务状态)。各类界面的适配策略:
+
+| 界面类型 | 横屏 | 竖屏 |
+| --- | --- | --- |
+| 居中弹窗(协议/登录/维护/状态弹窗)与小号选择面板 | 按各自宽度公式 | 同公式,靠 `min(…, 屏宽-48dp)` 自然收窄;不改形态 |
+| 支付容器 | 右侧全高抽屉(§9) | **底部抽屉**:贴底、宽 = 屏宽、高 ≤ 屏高 80%、顶部圆角 16dp、顶部居中抓手条(40×4dp 圆角,`#CFD2D8`);关闭符号由"`‹` 返回"改为"`⌄` 收起"(§9) |
+| 用户中心抽屉 | 左侧全高抽屉(§11.2) | 同为左侧全高抽屉,但宽度上限 **80% 屏宽**——必须保留右侧游戏可见条,维持"非全屏遮挡"语义 |
+| 悬浮球 / 自动进入提示 | 不随方向改变形态 | 同左 |
+
+- 宽度数值一律以本文档各节公式为准;设计系统网页演示中的固定像素宽(如 560px)是网页端简化,不作为实现依据。
+- 旋转切换形态时:滚动位置可重置,但输入内容、勾选状态、倒计时等业务状态必须保留。
+
 ---
 
 ## 2. 协议告知页(showProtocol)
@@ -305,7 +319,8 @@ smallText 行距 +2dp;hint 行距 +3dp。粗体使用 `Typeface.DEFAULT` + `Type
 - **用途与触发**:游戏调起充值下单后,展示 SDK 自有支付容器(右侧全高抽屉)。
 - **入参**:accountId、productName、amountText、serverText、roleText、orderId(空值经 textOrDash 变 `-1`——新实现改为用户可读占位)。
 - **布局**(遮罩 + 右侧抽屉):
-  - 抽屉:宽 `min(屏宽, max(520dp, 屏宽/2))`,全高,贴右(`Gravity.RIGHT`);底色 `#F5F5F5`,padding 18/14/18/0,elevation 18。
+  - 抽屉(横屏形态):宽 `min(屏宽, max(520dp, 屏宽/2))`,全高,贴右(`Gravity.RIGHT`);底色 `#F5F5F5`,padding 18/14/18/0,elevation 18。
+  - **竖屏形态(§1.12)**:改为底部抽屉——贴底、宽 = 屏宽、高 ≤ 屏高 80%、顶部圆角 16dp、顶部居中抓手条(40×4dp,`#CFD2D8`);头部关闭符号 `‹` 改 `⌄`(语义"收起",回调一致);订单卡/支付说明/底部支付栏结构不变,正文区滚动、支付栏钉底。旋转时实时切换形态,订单业务状态保留。
   - **头部行**:返回 `‹`(链接按钮,28sp,44×48dp)| 标题 `5755 游戏支付`(22sp,`#111111`,居中,占权重 1,高 48dp)| `SDK` 徽标(12sp 粗体 `#898989`,48×28dp,透明底 + `#9D9D9D` 1dp 全圆角描边)。
   - **订单卡**(白底圆角 14dp,padding 20/10,内含 5 行 checkoutRow):
     - 行规格(高 44dp 三列):标签 16sp `#222222` 宽 76dp | 值 15sp `#6C6C6C` 权重 1 | 金额列 15sp 粗体 `#676767` 宽 112dp 右对齐。
@@ -379,7 +394,7 @@ smallText 行距 +2dp;hint 行距 +3dp。粗体使用 `Typeface.DEFAULT` + `Type
 
 ### 11.2 用户中心抽屉(openUserCenter)
 
-- **容器**:左侧全高抽屉(`Gravity.LEFT`),宽 `min(屏宽, max(520dp, 屏宽×0.58))`,底色 `DRAWER_BG #F5F6F8`,elevation 12;层非模态(右侧游戏区域可操作)。
+- **容器**:左侧全高抽屉(`Gravity.LEFT`),宽 `min(屏宽, max(520dp, 屏宽×0.58))`,底色 `DRAWER_BG #F5F6F8`,elevation 12;层非模态(右侧游戏区域可操作)。**竖屏下宽度上限 80% 屏宽(§1.12)**——任何方向都必须保留右侧游戏可见条,不得全屏遮挡。
 - **关闭按钮**:`×` 26sp、色 `#747880`,44×44dp,抽屉右上角(距顶 6dp、距右 8dp)→ `onClosed("user_center")` + 关闭层(含悬浮球;游戏侧可再调 showFloatBall)。
 - **WebView**(铺满抽屉):系统 WebView;`javaScriptEnabled=true`、`javaScriptCanOpenWindowsAutomatically=false`、`allowFileAccess=false`、`allowFileAccessFromFileURLs=false`、`allowUniversalAccessFromFileURLs=false`;`overScrollMode=NEVER`;JS 桥名 **`UserCenter`**。
   - `loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)`——**空 baseURL(不可信 origin)**,不得伪造平台域名;平台真实用户中心 H5 属二期,接入后改为加载真实 URL。
