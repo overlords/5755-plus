@@ -23,7 +23,7 @@
 每次模拟器验收前必须确认运行的是当前有效验收包,避免历史包混入导致结果无效:
 
 - 包名为 `com.m5755.sdk.ui.sample`;新用户首登场景须先清空该包数据。
-- 日志 tag 为 `M5755Sdk`;初始化日志包含 `platformEnv=dev baseHost=dev.xingninghuyu.com gameId=<游戏ID>`。
+- 日志 tag 为 `M5755Sdk`;初始化日志包含 `platformEnv=dev baseHost=sdk-dev.xingninghuyu.com gameId=<游戏ID>`。
 - 登录链路日志为 `login_5755_account`;若出现其他 tag 或其他游戏前缀的账号日志,本次验收结果无效。
 - 真实登录成功后,本地 `shared_prefs/m5755_operate_min.xml` 必须出现 `platform_account_id`、`platform_token` 和当前游戏小号 `account`。
 - SDK UI 不表达"注册成功":口径为"5755 账户登录成功后进入实名检查",验证码登录下是否创建新平台主账户由服务端识别。
@@ -57,8 +57,8 @@
 
 ### B2【P1】自动登录跳过服务端校验
 
-- **本质**:`sdk-core` 的 `PlatformGateway` 自动登录分支读取本地 session 后即返回硬编码成功,未调用 `/api/sdk/v1/login` 进行服务端校验。这违反"本地登录态只能用于发起自动登录,不能替代账户有效检查放行进入游戏;网络失败或平台不可用时不能用本地登录态放行"的规格。
-- **修复方向**:autoLogin 分支补 `/api/sdk/v1/login` 或账户校验(`account/validate`)服务端调用,校验失败时按规格回退 5755 账户登录窗口。
+- **本质**:`sdk-core` 的 `PlatformGateway` 自动登录分支读取本地 session 后即返回硬编码成功,未调用登录接口(旧契约 `/api/sdk/v1/login`)进行服务端校验。这违反"本地登录态只能用于发起自动登录,不能替代账户有效检查放行进入游戏;网络失败或平台不可用时不能用本地登录态放行"的规格。
+- **修复方向**:autoLogin 分支补账户登录(`POST /api/sdk/v2/account-sessions`)或账户有效检查(`GET /api/sdk/v2/account-sessions`)服务端调用,校验失败时按规格回退 5755 账户登录窗口。
 
 ### B4【P1】小号列表为空时伪造演示小号
 

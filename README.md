@@ -29,7 +29,7 @@ docs/assets/
 ## 与旧项目的关系
 
 - 旧项目路径:`~/Developer/m5755`(Gradle 工程:sdk-core / sdk-ui / sdk / sample,纯 Java)。
-- 本仓库**只含文档与资产**,不含代码;新实现按 01→03→04→05→06→07 实现,以 08 验收。
+- 本仓库为**文档 + SDK + 平台服务端三件套同仓**:新实现的 Android SDK(Gradle 工程)与平台服务端(从零重构,参照旧平台原型 `~/Developer/U10`,一期只含 SDK 网关面)都在本仓库内开发,按 01→03→04→05→06→07 实现,以 08 验收;两端以 04 契约为共同口径同步演进(见 docs/adr/0001、0003)。
 - 旧实现可作参考,但其已知缺口(08 文档 B2-B5:自动登录跳过服务端校验、空列表伪造演示小号、设备验证空实现、结果弹窗写死样例)**不得**带入新实现。
-- **环境决定:新版本开发与联调一律对接 dev 后端 `dev.xingninghuyu.com`**(`artifactType=integration`、`platformEnv=dev`,见 04 环境矩阵)。init/config 已实测可用;端到端登录需平台测试账号或 mock devCode(实测演示手机号未返回可用 devCode),启动开发前先向平台申请。
+- **环境决定:新版本开发与联调一律对接新平台服务端的 dev 部署 `sdk-dev.xingninghuyu.com`**(`artifactType=integration`、`platformEnv=dev`,契约前缀 `/api/sdk/v2/*`,见 04 环境矩阵)。旧平台原型(U10)继续占用 `dev.xingninghuyu.com`/`api.xingninghuyu.com` 与 `/api/sdk/v1/*`,服务现有外部使用方,两者互不扰动。登录凭证自给自足:平台服务端短信 mock provider 直接返回 devCode,无需外部申请。
 - **数据决定:游戏小号一律由服务端返回,不可凭空造演示小号**;列表为空属平台侧异常,阻断登录并输出诊断(见 03/04/07/08)。
