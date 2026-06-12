@@ -34,6 +34,7 @@ func NewRouter(svc *domain.Service, st *store.Store, now func() time.Time) *gin.
 	v2.GET("/config", configHandler(svc))
 	v2.POST("/sms-codes", smsCodesHandler(svc))
 	v2.POST("/account-sessions", accountSessionsHandler(svc))
+	registerM2Routes(v2, svc)
 
 	// dev 控制面:dev build 注册并复用验签;production build 为 no-op(路由不存在)
 	devcontrol.Register(r, st, mw)
