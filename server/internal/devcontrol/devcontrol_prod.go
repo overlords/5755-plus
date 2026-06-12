@@ -6,8 +6,14 @@ package devcontrol
 import (
 	"github.com/gin-gonic/gin"
 
+	"m5755/server/internal/domain"
 	"m5755/server/internal/store"
 )
 
 // Register 在 production 构建下为 no-op:/internal/* 路由不存在,探测必然 404。
-func Register(_ *gin.Engine, _ *store.Store, _ gin.HandlerFunc) {}
+func Register(_ *gin.Engine, _ *store.Store, _ *domain.Service, _ gin.HandlerFunc) {}
+
+// FaultMiddleware 生产构建为透传中间件(无故障注入)。
+func FaultMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) { c.Next() }
+}

@@ -16,7 +16,8 @@ import (
 )
 
 // NewRouter 装配运维面、SDK 契约面(强制验签)与 dev 控制面(build tag 控制是否注册)。
-func NewRouter(svc *domain.Service, st *store.Store, now func() time.Time) *gin.Engine {
+// baseURL 为平台服务端公网地址,用于生成支付 paymentUrl(dev 占位支付台)。
+func NewRouter(svc *domain.Service, st *store.Store, now func() time.Time, baseURL string) *gin.Engine {
 	if now == nil {
 		now = time.Now
 	}
@@ -26,18 +27,21 @@ func NewRouter(svc *domain.Service, st *store.Store, now func() time.Time) *gin.
 	// 运维面:无签名、只读
 	r.GET("/healthz", func(c *gin.Context) { c.String(200, "m5755 platform server ok") })
 	r.GET("/openapi.json", openAPIHandler)
+	// dev 占位支付台页面(无签名,浏览器加载;生产化里程碑替换/移除)
+	r.GET("/pay/:orderId", payPlaceholderHandler(svc))
 
 	mw := signature.Middleware(st.LookupSigningKey, now)
 
-	// SDK 契约面:全端点强制验签
-	v2 := r.Group("/api/sdk/v2", mw)
+	// SDK 契约面:全端点强制验签 + dev 故障注入中间件(生产 build 为 no-op)
+	v2 := r.Group("/api/sdk/v2", mw, devcontrol.FaultMiddleware())
 	v2.GET("/config", configHandler(svc))
 	v2.POST("/sms-codes", smsCodesHandler(svc))
 	v2.POST("/account-sessions", accountSessionsHandler(svc))
 	registerM2Routes(v2, svc)
+	registerM3Routes(v2, svc, baseURL)
 
 	// dev 控制面:dev build 注册并复用验签;production build 为 no-op(路由不存在)
-	devcontrol.Register(r, st, mw)
+	devcontrol.Register(r, st, svc, mw)
 
 	return r
 }
@@ -83,12 +87,14 @@ func smsCodesHandler(svc *domain.Service) gin.HandlerFunc {
 }
 
 type accountSessionsReq struct {
-	GameID        string `json:"gameId"`
-	LoginMethod   string `json:"loginMethod"`
-	LoginAccount  string `json:"loginAccount"`
-	Credential    string `json:"credential"`
-	ChannelID     string `json:"channelId"`
-	ChannelSource string `json:"channelSource"`
+	GameID           string `json:"gameId"`
+	LoginMethod      string `json:"loginMethod"`
+	LoginAccount     string `json:"loginAccount"`
+	Credential       string `json:"credential"`
+	ChannelID        string `json:"channelId"`
+	ChannelSource    string `json:"channelSource"`
+	DeviceID         string `json:"deviceId"`
+	DeviceVerifyCode string `json:"deviceVerifyCode"`
 }
 
 func accountSessionsHandler(svc *domain.Service) gin.HandlerFunc {
@@ -99,12 +105,14 @@ func accountSessionsHandler(svc *domain.Service) gin.HandlerFunc {
 			return
 		}
 		data, f := svc.Login(c.Request.Context(), domain.LoginInput{
-			GameID:        req.GameID,
-			LoginMethod:   req.LoginMethod,
-			LoginAccount:  req.LoginAccount,
-			Credential:    req.Credential,
-			ChannelID:     req.ChannelID,
-			ChannelSource: req.ChannelSource,
+			GameID:           req.GameID,
+			LoginMethod:      req.LoginMethod,
+			LoginAccount:     req.LoginAccount,
+			Credential:       req.Credential,
+			ChannelID:        req.ChannelID,
+			ChannelSource:    req.ChannelSource,
+			DeviceID:         req.DeviceID,
+			DeviceVerifyCode: req.DeviceVerifyCode,
 		})
 		if f != nil {
 			result.WriteFail(c, f.HTTPStatus, f.Reason, f.Message)

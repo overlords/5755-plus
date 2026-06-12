@@ -34,11 +34,20 @@ const (
 )
 
 type Service struct {
-	store *store.Store
-	now   func() time.Time
+	store          *store.Store
+	now            func() time.Time
+	callbackSecret string
 }
 
-func New(s *store.Store) *Service { return &Service{store: s, now: time.Now} }
+// callbackSecretDev:dev 充值回调签名密钥(公开测试密钥,生产由发布配置注入)。
+const callbackSecretDev = "m5755-dev-callback-secret-v1"
+
+func New(s *store.Store) *Service {
+	return &Service{store: s, now: time.Now, callbackSecret: callbackSecretDev}
+}
+
+// CallbackSecret 供测试接收端验证签名。
+func (svc *Service) CallbackSecret() string { return svc.callbackSecret }
 
 // ---------- 配置 ----------
 
@@ -156,12 +165,14 @@ type LoginData struct {
 }
 
 type LoginInput struct {
-	GameID        string
-	LoginMethod   string
-	LoginAccount  string
-	Credential    string
-	ChannelID     string
-	ChannelSource string
+	GameID          string
+	LoginMethod     string
+	LoginAccount    string
+	Credential      string
+	ChannelID       string
+	ChannelSource   string
+	DeviceID        string // #25:安装级随机 ID,非硬件标识
+	DeviceVerifyCode string
 }
 
 func (svc *Service) Login(ctx context.Context, in LoginInput) (*LoginData, *Fault) {
@@ -179,6 +190,10 @@ func (svc *Service) Login(ctx context.Context, in LoginInput) (*LoginData, *Faul
 		return nil, fault(503, result.ReasonMaintenance, "平台维护中")
 	}
 
+	// 解析账户:sms 可建新账户;password 必须已存在并通过密码+设备校验(#25)。
+	var accountID, displayName string
+	var isNew bool
+
 	switch in.LoginMethod {
 	case "sms":
 		if !phoneRe.MatchString(in.LoginAccount) {
@@ -194,30 +209,34 @@ func (svc *Service) Login(ctx context.Context, in LoginInput) (*LoginData, *Faul
 		case store.SmsConsumeInvalid:
 			return nil, fault(401, result.ReasonSmsCodeInvalid, "验证码错误")
 		}
+		acc, isNewAcc, err := svc.store.FindOrCreateAccount(ctx, in.LoginAccount, in.ChannelID, in.ChannelSource)
+		if err != nil {
+			return nil, fault(503, result.ReasonPlatformUnavailable, "账户处理失败")
+		}
+		accountID, displayName, isNew = acc.PlatformAccountID, acc.DisplayName, isNewAcc
 	case "password":
-		// 里程碑 1 不实现 password 路径;明确拒绝而非空实现放行。
-		return nil, fault(400, result.ReasonParamInvalid, "password 登录暂未开放")
+		paID, fp := svc.authenticatePassword(ctx, in)
+		if fp != nil {
+			return nil, fp
+		}
+		accountID, displayName, isNew = paID, "", false
 	default:
 		return nil, fault(400, result.ReasonParamInvalid, "未知 loginMethod")
 	}
 
-	acc, isNew, err := svc.store.FindOrCreateAccount(ctx, in.LoginAccount, in.ChannelID, in.ChannelSource)
-	if err != nil {
-		return nil, fault(503, result.ReasonPlatformUnavailable, "账户处理失败")
-	}
-	token, exp, err := svc.store.CreateSession(ctx, acc.PlatformAccountID, in.GameID, sessionTTL)
+	token, exp, err := svc.store.CreateSession(ctx, accountID, in.GameID, sessionTTL)
 	if err != nil {
 		return nil, fault(503, result.ReasonPlatformUnavailable, "会话签发失败")
 	}
-	_, created, err := svc.store.EnsureFirstSubaccount(ctx, acc.PlatformAccountID, in.GameID)
+	_, created, err := svc.store.EnsureFirstSubaccount(ctx, accountID, in.GameID)
 	if err != nil {
 		return nil, fault(503, result.ReasonPlatformUnavailable, "首个小号建档失败")
 	}
 
 	out := &LoginData{
-		PlatformAccountID: acc.PlatformAccountID,
+		PlatformAccountID: accountID,
 		PlatformToken:     token,
-		DisplayName:       acc.DisplayName,
+		DisplayName:       displayName,
 		ExpiresAt:         exp.UTC().Format(time.RFC3339),
 		GameEntry:         GameEntry{IsNewGameUser: isNew},
 	}
@@ -225,12 +244,49 @@ func (svc *Service) Login(ctx context.Context, in LoginInput) (*LoginData, *Faul
 		out.GameEntry.CreatedSubaccount = &CreatedSubaccount{
 			Account:           created.Account,
 			GameID:            in.GameID,
-			PlatformAccountID: acc.PlatformAccountID,
+			PlatformAccountID: accountID,
 			DisplayName:       created.DisplayName,
 			IsDefault:         false,
 		}
 	}
 	return out, nil
+}
+
+// authenticatePassword 校验密码 + 设备信任(#25)。返回 platformAccountId。
+func (svc *Service) authenticatePassword(ctx context.Context, in LoginInput) (string, *Fault) {
+	paID, hash, _, ok, err := svc.store.FindAccountByLogin(ctx, in.LoginAccount)
+	if err != nil {
+		return "", fault(503, result.ReasonPlatformUnavailable, "账户读取失败")
+	}
+	if !ok || hash == "" || !checkPassword(hash, in.Credential) {
+		return "", fault(401, result.ReasonCredentialInvalid, "账号或密码错误")
+	}
+	// 设备信任:未提供 deviceId 时视为已信任(兼容无设备 ID 的调用);提供则按设备判定。
+	if in.DeviceID != "" {
+		trusted, err := svc.store.IsDeviceTrusted(ctx, paID, in.DeviceID)
+		if err != nil {
+			return "", fault(503, result.ReasonPlatformUnavailable, "设备校验失败")
+		}
+		if !trusted {
+			if in.DeviceVerifyCode == "" {
+				return "", fault(401, result.ReasonDeviceVerificationRequired, "设备需短信验证")
+			}
+			res, err := svc.store.ConsumeDeviceCode(ctx, in.GameID, in.LoginAccount, in.DeviceVerifyCode)
+			if err != nil {
+				return "", fault(503, result.ReasonPlatformUnavailable, "设备验证码校验失败")
+			}
+			if res == store.SmsConsumeExpired {
+				return "", fault(401, result.ReasonSmsCodeExpired, "验证码已过期")
+			}
+			if res == store.SmsConsumeInvalid {
+				return "", fault(401, result.ReasonSmsCodeInvalid, "验证码错误")
+			}
+			if err := svc.store.TrustDevice(ctx, paID, in.DeviceID); err != nil {
+				return "", fault(503, result.ReasonPlatformUnavailable, "设备信任写入失败")
+			}
+		}
+	}
+	return paID, nil
 }
 
 // ---------- 辅助 ----------

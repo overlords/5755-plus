@@ -4,15 +4,153 @@
 package devcontrol
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/gin-gonic/gin"
 
+	"m5755/server/internal/domain"
 	"m5755/server/internal/result"
 	"m5755/server/internal/store"
 )
 
+// ---- #24 故障注入(进程内,dev-only) ----
+
+type faultEntry struct {
+	typ     string
+	delayMs int
+	times   int
+}
+
+var (
+	faultMu       sync.Mutex
+	faultRegistry = map[string]*faultEntry{} // key: gameId|endpoint
+)
+
+func faultKey(gameID, endpoint string) string { return gameID + "|" + endpoint }
+
+// FaultMiddleware 命中(gameId, 路径)且剩余次数>0 时按 type 劫持响应并扣减。
+func FaultMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		gameID := c.Query("gameId")
+		if gameID == "" {
+			gameID = peekBodyGameID(c)
+		}
+		faultMu.Lock()
+		e := faultRegistry[faultKey(gameID, c.Request.URL.Path)]
+		var hit *faultEntry
+		if e != nil && e.times > 0 {
+			cp := *e
+			hit = &cp
+			e.times--
+			if e.times <= 0 {
+				delete(faultRegistry, faultKey(gameID, c.Request.URL.Path))
+			}
+		}
+		faultMu.Unlock()
+		if hit == nil {
+			c.Next()
+			return
+		}
+		switch hit.typ {
+		case "delay":
+			time.Sleep(time.Duration(hit.delayMs) * time.Millisecond)
+			c.Next()
+		case "http500":
+			c.Data(500, "text/plain", []byte("injected fault"))
+			c.Abort()
+		case "malformed":
+			c.Data(200, "application/json", []byte("{not-json"))
+			c.Abort()
+		default:
+			c.Next()
+		}
+	}
+}
+
+func setFault(gameID, endpoint, typ string, delayMs, times int) {
+	faultMu.Lock()
+	defer faultMu.Unlock()
+	faultRegistry[faultKey(gameID, endpoint)] = &faultEntry{typ: typ, delayMs: delayMs, times: times}
+}
+
+func clearFaults(gameID string) {
+	faultMu.Lock()
+	defer faultMu.Unlock()
+	for k := range faultRegistry {
+		if strings.HasPrefix(k, gameID+"|") {
+			delete(faultRegistry, k)
+		}
+	}
+}
+
+// peekBodyGameID 从请求体偷看 gameId(不消费 body,供 fault 中间件按游戏作用域命中)。
+func peekBodyGameID(c *gin.Context) string {
+	if c.Request.Body == nil {
+		return ""
+	}
+	body, err := io.ReadAll(io.LimitReader(c.Request.Body, 1<<20))
+	if err != nil {
+		return ""
+	}
+	c.Request.Body = io.NopCloser(bytes.NewReader(body))
+	var probe struct {
+		GameID string `json:"gameId"`
+	}
+	_ = json.Unmarshal(body, &probe)
+	return probe.GameID
+}
+
 // Register 在 dev/local 构建下注册 /internal/dev-control/*,复用验签中间件。
-func Register(r *gin.Engine, st *store.Store, mw gin.HandlerFunc) {
+func Register(r *gin.Engine, st *store.Store, svc *domain.Service, mw gin.HandlerFunc) {
 	g := r.Group("/internal/dev-control", mw)
+
+	// #23 推进调试订单并触发回调投递
+	g.POST("/complete-payment", func(c *gin.Context) {
+		var req struct {
+			GameID  string `json:"gameId"`
+			OrderID string `json:"orderId"`
+			Mode    string `json:"mode"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil || req.GameID == "" || req.OrderID == "" {
+			result.WriteFail(c, 400, result.ReasonParamInvalid, "缺少 gameId/orderId")
+			return
+		}
+		mode := req.Mode
+		if mode == "" {
+			mode = "成功"
+		}
+		if f := svc.CompletePayment(c.Request.Context(), req.GameID, req.OrderID, mode); f != nil {
+			result.WriteFail(c, f.HTTPStatus, f.Reason, f.Message)
+			return
+		}
+		result.WriteOK(c, gin.H{"orderId": req.OrderID, "mode": mode})
+	})
+
+	// #24 故障注入
+	g.POST("/fault", func(c *gin.Context) {
+		var req struct {
+			GameID   string `json:"gameId"`
+			Endpoint string `json:"endpoint"`
+			Type     string `json:"type"`
+			DelayMs  int    `json:"delayMs"`
+			Times    int    `json:"times"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil || req.GameID == "" || req.Endpoint == "" {
+			result.WriteFail(c, 400, result.ReasonParamInvalid, "缺少 gameId/endpoint")
+			return
+		}
+		times := req.Times
+		if times <= 0 {
+			times = 1
+		}
+		setFault(req.GameID, req.Endpoint, req.Type, req.DelayMs, times)
+		result.WriteOK(c, gin.H{"gameId": req.GameID, "endpoint": req.Endpoint, "type": req.Type, "times": times})
+	})
 
 	g.POST("/maintenance", func(c *gin.Context) {
 		var req struct {
@@ -43,6 +181,7 @@ func Register(r *gin.Engine, st *store.Store, mw gin.HandlerFunc) {
 			result.WriteFail(c, 503, result.ReasonPlatformUnavailable, "重置失败")
 			return
 		}
+		clearFaults(req.GameID)
 		result.WriteOK(c, gin.H{"gameId": req.GameID, "reset": true})
 	})
 

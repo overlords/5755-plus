@@ -27,6 +27,8 @@ const (
 	ReasonSignatureInvalid          = "signature_invalid"
 	ReasonTimestampExpired          = "timestamp_expired"
 	ReasonPlatformUnavailable       = "platform_unavailable"
+	// 里程碑 3:设备首次密码登录需短信验证(04 §1.2.1 修订随 #25 提交)。
+	ReasonDeviceVerificationRequired = "device_verification_required"
 )
 
 // ApiResult 是所有响应的统一信封。reason 在失败时必填,成功时省略(omitempty)。

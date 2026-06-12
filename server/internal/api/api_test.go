@@ -39,7 +39,7 @@ func setup(t *testing.T) (*httptest.Server, *store.Store) {
 	if err := st.Migrate(ctx); err != nil {
 		t.Fatalf("迁移失败: %v", err)
 	}
-	srv := httptest.NewServer(NewRouter(domain.New(st), st, time.Now))
+	srv := httptest.NewServer(NewRouter(domain.New(st), st, time.Now, "http://127.0.0.1:0"))
 	t.Cleanup(func() { srv.Close(); st.Close() })
 	return srv, st
 }
