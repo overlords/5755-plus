@@ -27,7 +27,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```
 docs/        # 8 份权威文档 + adr/ + agents/(共享)
-android/     # Android SDK Gradle 工程根:sdk-core / sdk-ui / sdk / sample(AGP 8.13.1,minSdk 21)
+android/     # Android SDK Gradle 工程根:sdk / sample 两模块(ADR-0006 单模块;AGP 8.13.1,minSdk 21)
 server/      # 平台服务端 Go 工程根(module m5755/server)
 scripts/     # 跨端脚本:部署 sdk-dev、发布门禁探测等
 .scratch/    # 本地工作区,不入库

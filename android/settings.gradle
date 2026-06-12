@@ -14,4 +14,5 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "m5755-sdk"
-include ":sdk-core", ":sdk-ui", ":sdk", ":sample"
+// ADR-0006:单一 :sdk 源码模块(核心/业务配套 UI 以包结构分层),AGP 原生产单一交付 AAR
+include ":sdk", ":sample"
