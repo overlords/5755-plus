@@ -31,3 +31,13 @@ cd uc && python3 -m http.server 8080
 - 仅经 `window.UserCenter.postAccountAction(action)` 回传账号动作:`switch_account` / `logout` / `session_invalid`(06 §3)。
 - **不**读取任何账户上下文(无 `getAccountContext`);主账户数据全部由本页凭 `platformToken` 自取。
 - token 经 `?token=` 传入,加载即读入内存并 `history.replaceState` 抹除可见 URL(06a §7)。
+
+## 测试
+
+数据层纯逻辑单测(`node:test`,零依赖、无构建,不入部署):
+
+```sh
+node --test uc/api.test.js
+```
+
+覆盖:`captureToken`(token 捕获 + URL 抹除 + 无 token 守卫,06a §7)、`classifyResponse`(401 / `platform_account_invalid` → session_invalid 收口、普通错误、成功取 data,06a §3)。`api.js` 用 `typeof module` 双模导出:浏览器是 `const UC` 全局,Node 可 `require` 纯函数。

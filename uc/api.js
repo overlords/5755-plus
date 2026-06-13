@@ -5,20 +5,45 @@
  * 真接口就位后把 USE_MOCK 置 false 即可,fetch 路径已按 06a §3 写好。
  */
 
+// ---- platformToken 捕获(纯函数,06a §7;可测)----
+// 取 ?token= 值并产出抹除 token 的 URL(保留其他 query/hash)。
+function captureToken(href) {
+  const u = new URL(href);
+  const token = u.searchParams.get('token') || '';
+  const had = u.searchParams.has('token');
+  if (had) u.searchParams.delete('token');
+  return { token, had, cleanUrl: u.pathname + u.search + u.hash };
+}
+
+// ---- 响应失效收口(纯函数,06a §3;可测)----
+// 决定一次响应是:失效(invalid,→ 上报 session_invalid)/ 普通错误(error)/ 成功(data)。
+function classifyResponse(status, json) {
+  if (status === 401) {
+    return { invalid: true, error: 'session_invalid', data: null };
+  }
+  if (json && json.ok === false) {
+    return {
+      invalid: json.reason === 'platform_account_invalid',
+      error: json.message || json.reason || 'request_failed',
+      data: null,
+    };
+  }
+  return { invalid: false, error: null, data: json ? json.data : undefined };
+}
+
 const UC = (() => {
   const USE_MOCK = true;                 // ← /api/uc/v2 就位后改 false
   const BASE = '/api/uc/v2';
 
   // ---- platformToken:加载即读入内存并抹除可见 URL(06a §7) ----
   let platformToken = '';
-  (function captureToken() {
-    const u = new URL(location.href);
-    platformToken = u.searchParams.get('token') || '';
-    if (u.searchParams.has('token')) {
-      u.searchParams.delete('token');
-      history.replaceState(null, '', u.pathname + u.search + u.hash);
+  if (typeof location !== 'undefined') {
+    const cap = captureToken(location.href);
+    platformToken = cap.token;
+    if (cap.had) {
+      history.replaceState(null, '', cap.cleanUrl);
     }
-  })();
+  }
 
   // ---- bridge 封装(06 §3 / 06a §6) ----
   const bridge = {
@@ -44,14 +69,12 @@ const UC = (() => {
       },
       body: body ? JSON.stringify(body) : undefined,
     });
-    if (res.status === 401) { handleInvalid(); throw new Error('session_invalid'); }
-    const json = await res.json();
-    // 约定:ApiResult { ok, data, reason, message }(04 口径)
-    if (json && json.ok === false) {
-      if (json.reason === 'platform_account_invalid') { handleInvalid(); }
-      throw new Error(json.message || json.reason || 'request_failed');
-    }
-    return json.data;
+    // 约定:ApiResult { ok, data, reason, message }(04 口径);失效收口走 classifyResponse(已单测,06a §3)
+    const json = res.status === 401 ? null : await res.json();
+    const r = classifyResponse(res.status, json);
+    if (r.invalid) { handleInvalid(); }
+    if (r.error) { throw new Error(r.error); }
+    return r.data;
   }
 
   // ---- 真实 API(06a §3) ----
@@ -98,3 +121,8 @@ const UC = (() => {
 
   return { bridge, ...(USE_MOCK ? mock : real), USE_MOCK };
 })();
+
+// 双模导出:浏览器用 const UC 全局;Node(测试)可 require 纯函数。
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { captureToken, classifyResponse };
+}
