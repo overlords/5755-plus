@@ -19,14 +19,14 @@
   ✓      ✓      ✓      ✓        生产化已就位,等真实资金/密钥/实名厂商闭合
 
 支轨 A · 用户中心平台面(uc SPA + 平台对玩家 API 面 /api/uc/v2)
-  进行中 ──► uc SPA 上线 uc.xingninghuyu.com(CTID 107)+ /profile 起步;
-            数据面续建中,SPA 暂 USE_MOCK;口径见 06a / ADR-0010
+  ✓ dev 贯通 ──► /api/uc/v2 六端点上 dev(CTID 105)+ uc SPA USE_MOCK=false 上线
+                (CTID 107),网关铸 token→uc 真读写全链 live 验证;口径 06a / ADR-0010
 
 支轨 B · 公会运营平台(原 M5,独立产品面)
   规划中(#32)──► 复用 M4 归因地基,独立排期,【不阻塞】主轴 GA
 ```
 
-三条终点线相互独立:**(A)v2 SDK GA** = 生产受控验收 6 项闭合;**(B)用户中心平台面 v1** = uc SPA 真数据贯通(`/api/uc/v2` 全面 + SPA `USE_MOCK=false`);**(C)公会平台 v1** = 独立里程碑。互不阻塞 SDK 商用。
+三条终点线相互独立:**(A)v2 SDK GA** = 生产受控验收 6 项闭合;**(B)用户中心平台面 v1** = uc SPA 真数据贯通(`/api/uc/v2` 全面 + SPA `USE_MOCK=false`)— **dev 已达成(2026-06-13)**,生产 uc 面随主轴 GA 真平台一并落地;**(C)公会平台 v1** = 独立里程碑。互不阻塞 SDK 商用。
 
 > **支轨 A 与 v2 范围**:用户中心平台面是「平台对玩家」侧产物(`/api/uc/v2` 与 SDK 网关面 `/api/sdk/v2` 并列且独立,ADR-0010),**不进 AAR**。SDK 侧只保留「H5 容器 + bridge」(M3 已交付);uc SPA 由 SDK WebView 加载。若将来要把该面纳入 **v2 正式出货**(而非作为独立平台面),须按 `01 §5` 重走能力白名单/公开 API/Manifest/依赖/接入自检评审。
 
@@ -61,7 +61,7 @@
 | 范围 | 以主账户为核心:身份/账号安全/换绑手机/修改密码/充值订单等(06a)。 |
 | 工程落位 | `uc/` 纯静态 SPA(无构建)部署 CTID 107(`uc.xingninghuyu.com`);`/api/uc/v2` 在现服务端 `internal/api`(`platformToken` Bearer 鉴权、不走 HMAC,与网关面并列独立,ADR-0010)。 |
 | 口径 | 06a(SPA 信息架构/数据 API)、ADR-0010(API 面)、06(容器与 bridge)。 |
-| 状态 | uc SPA 已上线(`USE_MOCK=true`)+ `/profile` 起步;数据面续建中。终点线 = `/api/uc/v2` 全面 + SPA `USE_MOCK=false` 真数据贯通。 |
+| 状态 | **v1 dev 贯通达成(2026-06-13)**:`/api/uc/v2` 六端点(profile / orders / 换绑手机 / 改密)部署 dev(CTID 105);uc SPA `USE_MOCK=false` 走绝对域真接口、上线 CTID 107;网关铸 token → uc 真读(profile/orders)+ 真写(换绑回显新号、不登出)全链 live 验证通过。生产 uc 面随主轴 GA 真平台一并落地。 |
 | 关系 | **不阻塞** v2 SDK GA;独立排期。纳入 v2 正式出货须走 `01 §5` 评审。 |
 | 入口 | `user-center-h5` 分支(uc SPA + /api/uc/v2 + 部署 + WebView 加载态 #50/#51)。 |
 
