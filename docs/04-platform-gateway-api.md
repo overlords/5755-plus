@@ -194,6 +194,7 @@ HTTP方法(大写) + "\n"
 | `configVersion` | 平台配置版本。 |
 | `sdkLatestVersion` / `sdkMinVersion` / `updateRequired` | SDK 版本信息与是否强制更新。 |
 | `loginDomain` / `paymentDomain` | 登录域、支付域。 |
+| `userCenterUrl` | 用户中心 H5 **完整地址**(平台远程页,以主账户为核心)。**是完整 URL,非域**(区别于上面两个域字段);SDK 仅在末尾追加 `?token=<platformToken>` 加载,见 06 §5。可选:平台未配置时省略(`omitempty`),SDK 缺省回退内置最小页。 |
 
 业务规则:
 

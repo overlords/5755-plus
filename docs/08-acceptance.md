@@ -43,7 +43,7 @@
 | 7 | 默认小号自动进入 | 已设置默认小号后冷启动自动登录,展示轻量自动进入提示,不展示完整小号选择页 | 日志 `sub_account_auto_prompt default=<account>` |
 | 8 | 角色上报 | 角色上报绑定当前游戏小号并返回成功 | 日志 `role_report state code=0` |
 | 9 | 支付 | 支付页展示商品、当前小号、区服、角色和订单(均取自 `Order` 入参);确认支付后订单创建成功、支付入口已获取;支付状态弹层关闭后恢复悬浮入口 | `assets/acceptance/05_payment_state.png`,日志 `payment state code=0 ... paymentUrlSet=true` |
-| 10 | 用户中心 | 悬浮入口打开 H5 用户中心,H5 显示当前游戏小号上下文;切换入口文案为"切换小号"(不是"切换账号") | `assets/acceptance/06_user_center_switch_subaccount.png` |
+| 10 | 用户中心 | 悬浮入口打开 H5 用户中心,H5 为**平台远程页、以主账户为核心**(凭 `platformToken` 自取,不经 bridge 取小号上下文);切换入口文案为"切换小号"(不是"切换账号") | `assets/acceptance/06_user_center_switch_subaccount.png`(旧图为 #5 前样式,实测时刷新) |
 | 11 | 用户中心切换小号 | 点击"切换小号"直接进入小号选择页,不触发防沉迷页、登出或 5755 账户登录页 | 日志 `user_center switch_account`、`sub_account_picker switch` |
 | 12 | 样例操作面板 | 样例操作面板高度按屏幕可见区域约束,可滚动到角色上报、游戏支付、用户中心、退出确认和登出 | `assets/acceptance/07_sample_panel_scroll.png` |
 

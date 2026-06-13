@@ -223,7 +223,7 @@ smallText 行距 +2dp;hint 行距 +3dp。粗体使用 `Typeface.DEFAULT` + `Type
   3. **登录按钮**:主按钮 `登录`,MATCH_PARENT×48dp,顶边距 16dp。
   4. **协议勾选行**(顶边距 12dp):圆形复选框 **18×18dp**(选中:`PRIMARY` 圆底 + 白色 ✓ 12sp 粗体;未选中:白底 + `#D5D7DD` 1dp 描边)+ 文案 `我已阅读并同意 用户协议 和 隐私政策`(12sp,色 `#9A9CA3`,左边距 8dp)。整行可点击切换勾选;默认 **未勾选**。
 - **发送验证码流程**:
-  - 手机号为空 → toast `请输入手机号`,不发请求。
+  - 手机号校验:输入框限 **11 位上限**(`LengthFilter(11)` + 手机号键盘 `TYPE_CLASS_PHONE`);为空 → toast `请输入手机号`;不匹配 `^1\d{10}$`(1 开头、共 11 位)→ toast `请输入正确的 11 位手机号`;均不发请求。仅验证码 Tab 生效,密码 Tab 的「手机号或账号」字段不受此约束。
   - 点击后按钮立即进入"发送中"态:禁用、文字 `发送中`、色 `#A6A9B0`;回调 `onSmsCodeRequested(account)`。
   - 结果由 `showSmsCodeRequestResult(message, devCode, success)` 驱动:
     - 成功 → 启动 **60 秒倒计时**(`SMS_CODE_COUNTDOWN_SECONDS = 60`):按钮禁用,文字依次 `60s`→`59s`→…→`1s`(每秒刷新,色 `#A6A9B0`),结束后恢复可用、文字 `重新发送`、色 `PRIMARY_DEEP`。
