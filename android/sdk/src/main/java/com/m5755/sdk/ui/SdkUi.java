@@ -1107,10 +1107,11 @@ public final class SdkUi implements FlowUi {
     }
 
     /**
-     * 给远程加载的 WebView 套加载态(07 §1.13):静态占位(`WEAK` + 「加载中…」)盖白屏,
-     * `onPageFinished` 把 WebView 淡入揭示,`onReceivedError` → 「加载失败」+「重试」。
+     * 给远程加载的 WebView 套加载态(07 §1.13):静态占位(`WEAK` 底 + 居中 5755 品牌静帧图)盖白屏,
+     * `onPageFinished` 把 WebView 淡入揭示,`onReceivedError` → 隐藏品牌图、显「加载失败」+「重试」。
      * 返回应加入容器的 FrameLayout(含 web + 占位层);内部完成 setWebViewClient + loadUrl + 重试。
-     * 无 spinner/循环(§1.11)、无固定超时。仅用于远程 loadUrl;瞬时本地 loadData(回退页)不走此辅助。
+     * 品牌图为静态单帧、无 spinner/循环(§1.11),加载中态无文字提示;无固定超时。
+     * 仅用于远程 loadUrl;瞬时本地 loadData(回退页)不走此辅助。
      */
     private FrameLayout loadableWeb(final android.webkit.WebView web, final String url) {
         final FrameLayout container = new FrameLayout(host);
@@ -1120,10 +1121,17 @@ public final class SdkUi implements FlowUi {
         final FrameLayout placeholder = new FrameLayout(host);
         placeholder.setBackgroundColor(UiKit.WEAK);
         placeholder.setClickable(true); // 吃掉点击,避免穿透到加载中的页面
+        // 加载中态:居中 5755 品牌静帧图(160dp 宽、fitCenter,§1.13);失败态隐藏、改显文字+重试
+        final android.widget.ImageView brand = new android.widget.ImageView(host);
+        brand.setImageResource(com.m5755.operate.R.drawable.m5755_web_loading);
+        brand.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+        brand.setAdjustViewBounds(true);
+        placeholder.addView(brand, new FrameLayout.LayoutParams(
+                UiKit.dp(host, 160), ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
         final TextView msg = new TextView(host);
-        msg.setText("加载中…");
         msg.setTextSize(14);
         msg.setTextColor(UiKit.MUTED);
+        msg.setVisibility(View.GONE); // 仅失败态显示「加载失败」
         placeholder.addView(msg, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
         final TextView retry = new TextView(host);
@@ -1146,7 +1154,8 @@ public final class SdkUi implements FlowUi {
         final Runnable showLoading = new Runnable() {
             public void run() {
                 errored[0] = false;
-                msg.setText("加载中…");
+                brand.setVisibility(View.VISIBLE);
+                msg.setVisibility(View.GONE);
                 retry.setVisibility(View.GONE);
                 placeholder.setVisibility(View.VISIBLE);
                 web.setAlpha(0f);
@@ -1155,7 +1164,9 @@ public final class SdkUi implements FlowUi {
         final Runnable showError = new Runnable() {
             public void run() {
                 errored[0] = true;
+                brand.setVisibility(View.GONE);
                 msg.setText("加载失败");
+                msg.setVisibility(View.VISIBLE);
                 retry.setVisibility(View.VISIBLE);
                 placeholder.setVisibility(View.VISIBLE);
                 web.setAlpha(0f);
