@@ -1107,10 +1107,11 @@ public final class SdkUi implements FlowUi {
     }
 
     /**
-     * 给远程加载的 WebView 套加载态(07 §1.13):静态占位(`WEAK` + 「加载中…」)盖白屏,
-     * `onPageFinished` 把 WebView 淡入揭示,`onReceivedError` → 「加载失败」+「重试」。
-     * 返回应加入容器的 FrameLayout(含 web + 占位层);内部完成 setWebViewClient + loadUrl + 重试。
-     * 无 spinner/循环(§1.11)、无固定超时。仅用于远程 loadUrl;瞬时本地 loadData(回退页)不走此辅助。
+     * 给远程加载的 WebView 套加载态(07 §1.13):占位(`WEAK` 底 + 居中品牌动效徽标——轨道环旋转 +
+     * 「5755」静止)盖白屏,`onPageFinished` 把 WebView 淡入揭示,`onReceivedError` → 隐藏徽标、
+     * 显「加载失败」+「重试」。返回应加入容器的 FrameLayout(含 web + 占位层);内部完成
+     * setWebViewClient + loadUrl + 重试。旋转为 §1.11 为 WebView 加载态保留的品牌 spinner 例外;
+     * 就绪/失败/关抽屉即停转,无固定超时。仅用于远程 loadUrl;瞬时本地 loadData(回退页)不走此辅助。
      */
     private FrameLayout loadableWeb(final android.webkit.WebView web, final String url) {
         final FrameLayout container = new FrameLayout(host);
@@ -1120,10 +1121,36 @@ public final class SdkUi implements FlowUi {
         final FrameLayout placeholder = new FrameLayout(host);
         placeholder.setBackgroundColor(UiKit.WEAK);
         placeholder.setClickable(true); // 吃掉点击,避免穿透到加载中的页面
+        // 加载中态:品牌动效徽标——轨道环绕中心旋转 + 「5755」静止(160dp,§1.13);失败态隐藏、改显文字+重试
+        final int badgeW = UiKit.dp(host, 160);
+        final int badgeH = badgeW * 160 / 240; // 维持原 SVG 画布 3:2
+        final FrameLayout badge = new FrameLayout(host);
+        final android.widget.ImageView orbit = new android.widget.ImageView(host);
+        orbit.setImageResource(com.m5755.operate.R.drawable.m5755_web_loading_orbit);
+        orbit.setScaleType(android.widget.ImageView.ScaleType.FIT_XY);
+        orbit.setPivotX(badgeW / 2f);         // 轨道中心 x = 120/240
+        orbit.setPivotY(badgeH * 67f / 160f); // 轨道中心 y = 67/160
+        badge.addView(orbit, new FrameLayout.LayoutParams(badgeW, badgeH));
+        final android.widget.ImageView mark = new android.widget.ImageView(host);
+        mark.setImageResource(com.m5755.operate.R.drawable.m5755_web_loading_brand);
+        mark.setScaleType(android.widget.ImageView.ScaleType.FIT_XY);
+        badge.addView(mark, new FrameLayout.LayoutParams(badgeW, badgeH));
+        placeholder.addView(badge, new FrameLayout.LayoutParams(badgeW, badgeH, Gravity.CENTER));
+        // 轨道匀速旋转(1.8s/圈、线性、无限循环);§1.11 为 WebView 加载态保留的品牌 spinner 例外
+        final android.animation.ObjectAnimator spin =
+                android.animation.ObjectAnimator.ofFloat(orbit, "rotation", 0f, 360f);
+        spin.setDuration(1800);
+        spin.setInterpolator(new android.view.animation.LinearInterpolator());
+        spin.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+        orbit.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            public void onViewAttachedToWindow(View v) {}
+            public void onViewDetachedFromWindow(View v) { spin.cancel(); } // 关抽屉即停,免泄漏
+        });
+        spin.start(); // 占位默认即加载态,开转;onPageFinished/失败时 cancel
         final TextView msg = new TextView(host);
-        msg.setText("加载中…");
         msg.setTextSize(14);
         msg.setTextColor(UiKit.MUTED);
+        msg.setVisibility(View.GONE); // 仅失败态显示「加载失败」
         placeholder.addView(msg, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
         final TextView retry = new TextView(host);
@@ -1146,7 +1173,9 @@ public final class SdkUi implements FlowUi {
         final Runnable showLoading = new Runnable() {
             public void run() {
                 errored[0] = false;
-                msg.setText("加载中…");
+                badge.setVisibility(View.VISIBLE);
+                if (!spin.isStarted()) spin.start();
+                msg.setVisibility(View.GONE);
                 retry.setVisibility(View.GONE);
                 placeholder.setVisibility(View.VISIBLE);
                 web.setAlpha(0f);
@@ -1155,7 +1184,10 @@ public final class SdkUi implements FlowUi {
         final Runnable showError = new Runnable() {
             public void run() {
                 errored[0] = true;
+                badge.setVisibility(View.GONE);
+                spin.cancel();
                 msg.setText("加载失败");
+                msg.setVisibility(View.VISIBLE);
                 retry.setVisibility(View.VISIBLE);
                 placeholder.setVisibility(View.VISIBLE);
                 web.setAlpha(0f);
@@ -1182,6 +1214,7 @@ public final class SdkUi implements FlowUi {
                 if (errored[0]) {
                     return; // 出错后停在错误态,不淡入错误页
                 }
+                spin.cancel(); // 页面就绪,停转
                 placeholder.setVisibility(View.GONE);
                 v.animate().alpha(1f).setDuration(200).start(); // §1.11 允许的轻微淡入
             }
