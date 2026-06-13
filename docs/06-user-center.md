@@ -28,17 +28,15 @@ H5 内容边界:
 
 ## 3. JS Bridge 最小契约
 
-SDK 通过 `addJavascriptInterface` 向页面注入名为 `UserCenter` 的桥对象(`window.UserCenter`),仅暴露两个方法:
+用户中心 H5 由**平台远程页**承载(见 §5),**主账户内容由平台 H5 凭 SDK 传入的 `platformToken` 自取**;SDK 不再经 bridge 下发任何账户上下文数据。SDK 通过 `addJavascriptInterface` 向页面注入名为 `UserCenter` 的桥对象(`window.UserCenter`),**仅暴露一个方法**:
 
 | Bridge 方法 | 参数 | 返回 | 说明 |
 | --- | --- | --- | --- |
-| `getAccountContext()` | 无 | JSON 字符串 | 返回当前游戏小号上下文,当前仅含一个字段:`{"accountId":"<当前游戏小号 ID>"}`。 |
 | `postAccountAction(action)` | `String action` | 无 | H5 向 SDK 回传账号动作。仅接受 `logout`、`switch_account`、`session_invalid` 三个取值;其他任何取值在进入 SDK 回调前归一为 `unknown`。回调在 UI 线程派发。 |
 
 契约约束:
 
-- Bridge 暴露面固定为上述两个方法,不得扩大;不提供任何文件、媒体、下载、跳转或通用能力方法。
-- `getAccountContext` 的返回是最小集合,只有 `accountId`;新增字段需重新评审。
+- Bridge 暴露面固定为 `postAccountAction` 一个方法,不得扩大;**不提供任何账户上下文读取**(已移除 `getAccountContext`)及文件、媒体、下载、跳转或通用能力方法。
 - 非法动作值不抛错、不透传,统一归一为 `unknown`,由 SDK 侧忽略或仅做诊断记录。
 
 ## 4. 账号动作语义
@@ -55,18 +53,9 @@ SDK 通过 `addJavascriptInterface` 向页面注入名为 `UserCenter` 的桥对
 - **用户中心不提供切换 5755 账户**。切换 5755 账户只能通过退出登录后重新登录完成。
 - 切换游戏小号与退出登录必须区分:只有 `logout` 才返回 5755 账户登录窗口。
 
-## 5. 阶段说明
+## 5. 用户中心 = 平台真实 H5
 
-### 5.1 当前(v2):SDK 本地最小容器
-
-- 用户中心内容为 SDK 内置本地 HTML,通过 `loadDataWithBaseURL(null, ...)` 加载;**baseURL 为 `null`(不可信 origin),不伪造任何平台域名**(如 `https://sdk.5755.local` 之类不存在的域名)。
-- 本地容器仅提供:当前游戏小号上下文展示、切换小号、退出登录;页面通过 `UserCenter.getAccountContext()` 同步小号 ID,通过 `UserCenter.postAccountAction(...)` 回传动作。
-- 更多账号服务由平台用户中心 H5 提供,属未来范围。
-
-### 5.2 未来:接入平台真实 H5
-
-- 未来接入平台真实用户中心 H5 URL,替换本地容器内容;Bridge 契约(第 3 节)保持不变。
-- 接入时必须完成安全评审,至少覆盖:
-  - **Bridge 暴露面**:确认仍仅暴露 `getAccountContext` / `postAccountAction` 两个方法,无新增能力泄漏;
-  - **origin 校验**:加载真实 URL 后,桥对象暴露给的页面来源必须受控,需评审对加载域名/来源的校验策略,防止任意页面调用 Bridge;
-  - 容器禁用项(文件/媒体/APK/外跳/通用 H5)保持关闭。
+- 用户中心是**平台远程 H5 页**,以**主账户为核心**(账号安全、绑定手机、订单等由平台页承载)。SDK 用 WebView 加载平台用户中心 URL,经查询参数传入 `platformToken` 供平台页拉取主账户内容。
+- 用户中心 URL **不进静态协议域**(协议页走静态协议路径见 `07`/`01`;用户中心走独立、可由平台配置的 H5 地址),**由平台配置提供,SDK 不硬编码**。
+- 安全:加载远程 URL 须 https;`origin` 受控(评审加载域名/来源校验,防任意页面调用 Bridge);容器禁用项(文件/媒体/APK/外跳/通用 H5)保持关闭;bridge 仅 `postAccountAction`(§3)。
+- **不向游戏暴露主账户**:`account = 游戏小号 ID` 的对游戏契约不变;主账户仅在"平台对玩家"的用户中心 H5 内由平台承载,不经公开 API 或 bridge 透给游戏。
