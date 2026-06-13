@@ -65,11 +65,13 @@ public class OperatingLoopTest {
     @Test
     public void userCenterSwitchAccountEntersPicker() throws Exception {
         loginToGame();
-        // 悬浮球"账" → 用户中心 → 切换小号 → 小号选择页
+        // 悬浮球"账" → 用户中心(平台 uc SPA,以主账户为核心)→ 切换 → 小号选择页
+        // demo userCenterUrl 指向 uc.xingninghuyu.com(已部署),加载真 uc SPA(06a)
         h.tapExact("账");
-        assertTrue("用户中心展示当前小号", h.hasText("当前游戏小号 ID", TestHarness.WAIT));
-        h.tapExact("切换小号");
-        assertTrue("切换小号进选择页", h.hasText("选择小号进入游戏", TestHarness.WAIT));
+        assertTrue("用户中心应渲染 uc SPA(主账户视图)",
+                h.hasText("换绑手机", TestHarness.WAIT) || h.hasText("充值订单", TestHarness.WAIT));
+        h.tapInWebView("切换"); // uc SPA 当前小号行「切换」→ bridge switch_account(在 WebView 内点,避开主屏按钮)
+        assertTrue("切换进选择页", h.hasText("选择小号进入游戏", TestHarness.WAIT));
         assertTrue("不触发登出", !h.hasText("账号变化", 1500));
     }
 }

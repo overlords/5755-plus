@@ -950,21 +950,24 @@ public final class SdkUi implements FlowUi {
         ws.setAllowUniversalAccessFromFileURLs(false);
         ws.setUserAgentString(ws.getUserAgentString() + " M5755Sdk/" + SDK_VERSION_UA); // UA 带 SDK 版本号
         web.addJavascriptInterface(new UserCenterBridge(), "UserCenter");
-        web.setWebViewClient(new android.webkit.WebViewClient() {
-            @Override
-            public boolean shouldOverrideUrlLoading(android.webkit.WebView v, String u) {
-                if (u != null && (u.startsWith("http://") || u.startsWith("https://"))) {
-                    v.loadUrl(u); // 站内加载,不外跳系统浏览器
-                }
-                return true;
-            }
-        });
+        final View centerView;
         if (userCenterUrl != null && !userCenterUrl.isEmpty()) {
-            // #5:平台用户中心 H5,带 platformToken 供平台页拉取主账户
+            // #5:平台用户中心 H5,带 platformToken;§1.13 套加载态(占位 + 就绪淡入 + 失败重试)
             String sep = userCenterUrl.contains("?") ? "&" : "?";
-            web.loadUrl(userCenterUrl + sep + "token=" + android.net.Uri.encode(platformToken));
+            centerView = loadableWeb(web, userCenterUrl + sep + "token=" + android.net.Uri.encode(platformToken));
         } else {
+            // 未配置 URL:瞬时本地回退页,不套加载态(避免一闪)
+            web.setWebViewClient(new android.webkit.WebViewClient() {
+                @Override
+                public boolean shouldOverrideUrlLoading(android.webkit.WebView v, String u) {
+                    if (u != null && (u.startsWith("http://") || u.startsWith("https://"))) {
+                        v.loadUrl(u); // 站内加载,不外跳系统浏览器
+                    }
+                    return true;
+                }
+            });
             web.loadDataWithBaseURL(null, userCenterFallbackHtml(), "text/html", "utf-8", null); // 未配置 URL 的最小回退
+            centerView = web;
         }
 
         int dm = host.getResources().getDisplayMetrics().widthPixels;
@@ -976,7 +979,7 @@ public final class SdkUi implements FlowUi {
         }
         FrameLayout.LayoutParams wlp = new FrameLayout.LayoutParams(w, ViewGroup.LayoutParams.MATCH_PARENT);
         wlp.gravity = Gravity.START;
-        overlay.addView(web, wlp);
+        overlay.addView(centerView, wlp);
         ViewGroup root = (ViewGroup) host.findViewById(android.R.id.content);
         root.addView(overlay, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
     }
@@ -1089,17 +1092,8 @@ public final class SdkUi implements FlowUi {
         ws.setAllowFileAccessFromFileURLs(false);
         ws.setAllowUniversalAccessFromFileURLs(false);
         ws.setUserAgentString(ws.getUserAgentString() + " M5755Sdk/" + SDK_VERSION_UA);
-        web.setWebViewClient(new android.webkit.WebViewClient() {
-            @Override
-            public boolean shouldOverrideUrlLoading(android.webkit.WebView v, String u) {
-                if (u != null && (u.startsWith("http://") || u.startsWith("https://"))) {
-                    v.loadUrl(u); // 站内加载,不外跳系统浏览器
-                }
-                return true; // 其它 scheme(tel/intent 等)一律拦掉
-            }
-        });
-        web.loadUrl(url);
-        panel.addView(web, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        // §1.13 套加载态(占位 + 就绪淡入 + 失败重试);loadableWeb 内部 setWebViewClient + loadUrl
+        panel.addView(loadableWeb(web, url), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         final LinearLayout layer = panel;
         root.addView(layer, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -1110,6 +1104,104 @@ public final class SdkUi implements FlowUi {
                 web.destroy();
             }
         });
+    }
+
+    /**
+     * 给远程加载的 WebView 套加载态(07 §1.13):静态占位(`WEAK` + 「加载中…」)盖白屏,
+     * `onPageFinished` 把 WebView 淡入揭示,`onReceivedError` → 「加载失败」+「重试」。
+     * 返回应加入容器的 FrameLayout(含 web + 占位层);内部完成 setWebViewClient + loadUrl + 重试。
+     * 无 spinner/循环(§1.11)、无固定超时。仅用于远程 loadUrl;瞬时本地 loadData(回退页)不走此辅助。
+     */
+    private FrameLayout loadableWeb(final android.webkit.WebView web, final String url) {
+        final FrameLayout container = new FrameLayout(host);
+        container.addView(web, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        final FrameLayout placeholder = new FrameLayout(host);
+        placeholder.setBackgroundColor(UiKit.WEAK);
+        placeholder.setClickable(true); // 吃掉点击,避免穿透到加载中的页面
+        final TextView msg = new TextView(host);
+        msg.setText("加载中…");
+        msg.setTextSize(14);
+        msg.setTextColor(UiKit.MUTED);
+        placeholder.addView(msg, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER));
+        final TextView retry = new TextView(host);
+        retry.setText("重试");
+        retry.setTextSize(14);
+        retry.getPaint().setFakeBoldText(true);
+        retry.setTextColor(UiKit.PRIMARY_DEEP);
+        retry.setGravity(Gravity.CENTER);
+        retry.setPadding(UiKit.dp(host, 22), UiKit.dp(host, 7), UiKit.dp(host, 22), UiKit.dp(host, 7));
+        retry.setBackground(UiKit.roundedStroke(UiKit.WHITE, UiKit.dp(host, 8), UiKit.PRIMARY_DEEP, UiKit.dp(host, 1)));
+        retry.setVisibility(View.GONE);
+        FrameLayout.LayoutParams retryLp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.CENTER);
+        retryLp.topMargin = UiKit.dp(host, 42);
+        placeholder.addView(retry, retryLp);
+        container.addView(placeholder, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        final boolean[] errored = {false};
+        final Runnable showLoading = new Runnable() {
+            public void run() {
+                errored[0] = false;
+                msg.setText("加载中…");
+                retry.setVisibility(View.GONE);
+                placeholder.setVisibility(View.VISIBLE);
+                web.setAlpha(0f);
+            }
+        };
+        final Runnable showError = new Runnable() {
+            public void run() {
+                errored[0] = true;
+                msg.setText("加载失败");
+                retry.setVisibility(View.VISIBLE);
+                placeholder.setVisibility(View.VISIBLE);
+                web.setAlpha(0f);
+            }
+        };
+        retry.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                showLoading.run();
+                web.loadUrl(url);
+            }
+        });
+
+        web.setAlpha(0f);
+        web.setWebViewClient(new android.webkit.WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(android.webkit.WebView v, String u) {
+                if (u != null && (u.startsWith("http://") || u.startsWith("https://"))) {
+                    v.loadUrl(u); // 站内加载,不外跳系统浏览器
+                }
+                return true;
+            }
+            @Override
+            public void onPageFinished(android.webkit.WebView v, String u) {
+                if (errored[0]) {
+                    return; // 出错后停在错误态,不淡入错误页
+                }
+                placeholder.setVisibility(View.GONE);
+                v.animate().alpha(1f).setDuration(200).start(); // §1.11 允许的轻微淡入
+            }
+            @Override
+            public void onReceivedError(android.webkit.WebView v, android.webkit.WebResourceRequest req,
+                                        android.webkit.WebResourceError err) {
+                if (req != null && req.isForMainFrame()) {
+                    showError.run(); // 主框架加载失败(API 23+)
+                }
+            }
+            @Override
+            @SuppressWarnings("deprecation")
+            public void onReceivedError(android.webkit.WebView v, int code, String desc, String failingUrl) {
+                if (url.equals(failingUrl)) {
+                    showError.run(); // API <23:按主 url 过滤,避免子资源误报
+                }
+            }
+        });
+        web.loadUrl(url);
+        return container;
     }
 
     // ===== 模态构建 =====
