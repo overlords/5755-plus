@@ -57,12 +57,16 @@ func (s *Store) KickAccount(ctx context.Context, gameID, platformAccountID strin
 type RealNameState struct {
 	Verified bool
 	Adult    bool
+	Pending  bool   // NPPA 异步"认证中"(等查询接口出结果)
+	AI       string // 本次认证的游戏内唯一标识(查询凭据)
+	PI       string // NPPA 用户唯一标识(已认证)
 }
 
 func (s *Store) GetRealName(ctx context.Context, platformAccountID string) (*RealNameState, error) {
 	var st RealNameState
-	err := s.pool.QueryRow(ctx, `SELECT real_name_verified, adult FROM platform_accounts
-		WHERE platform_account_id=$1`, platformAccountID).Scan(&st.Verified, &st.Adult)
+	err := s.pool.QueryRow(ctx, `SELECT real_name_verified, adult, real_name_pending, real_name_ai, real_name_pi
+		FROM platform_accounts WHERE platform_account_id=$1`, platformAccountID).
+		Scan(&st.Verified, &st.Adult, &st.Pending, &st.AI, &st.PI)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}

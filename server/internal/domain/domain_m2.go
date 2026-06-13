@@ -2,9 +2,12 @@ package domain
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"regexp"
 	"time"
 
+	"m5755/server/internal/nppa"
 	"m5755/server/internal/result"
 	"m5755/server/internal/store"
 )
@@ -55,13 +58,15 @@ var idNumberRe = regexp.MustCompile(`^\d{17}[\dXx]$`)
 type RealNameData struct {
 	Verified                    bool `json:"verified"`
 	Adult                       bool `json:"adult"`
+	Pending                     bool `json:"pending,omitempty"` // NPPA 认证中(异步,等查询接口出结果)
 	AntiAddictionEntryBlocked   bool `json:"antiAddictionEntryBlocked"`
 	AntiAddictionPaymentBlocked bool `json:"antiAddictionPaymentBlocked"`
 }
 
 // realNameGates 门禁最小推导(04 §2.4):未实名→阻进入+支付;已实名未成年→放行进入阻支付;dev 注入可覆盖。
+// "认证中"按未实名对待(verified=false → 阻进入+支付),Pending 仅作信息透出。
 func (svc *Service) realNameGates(ctx context.Context, gameID, platformAccountID string, st *store.RealNameState) (*RealNameData, error) {
-	d := &RealNameData{Verified: st.Verified, Adult: st.Adult}
+	d := &RealNameData{Verified: st.Verified, Adult: st.Adult, Pending: st.Pending}
 	if !st.Verified {
 		d.AntiAddictionEntryBlocked = true
 		d.AntiAddictionPaymentBlocked = true
@@ -89,6 +94,10 @@ func (svc *Service) GetRealName(ctx context.Context, gameID, platformAccountID, 
 	if err != nil {
 		return nil, fault(503, result.ReasonPlatformUnavailable, "实名状态读取失败")
 	}
+	// 懒查询(a):异步"认证中"的账户,本次读取顺带向 NPPA 查询接口拿结果并定案。
+	if st.Pending && !svc.realNameMock {
+		st = svc.resolvePending(ctx, gameID, platformAccountID, st)
+	}
 	d, err := svc.realNameGates(ctx, gameID, platformAccountID, st)
 	if err != nil {
 		return nil, fault(503, result.ReasonPlatformUnavailable, "门禁判定失败")
@@ -96,13 +105,37 @@ func (svc *Service) GetRealName(ctx context.Context, gameID, platformAccountID, 
 	return d, nil
 }
 
-// SubmitRealName dev/联调口径:格式校验 + mock 通过(身份证 18 位、出生日期合法);
-// 生产口径:未配置真实核验 provider 时 fail-closed(D5 发布门禁项,不得以 mock 冒充生产核验)。
-func (svc *Service) SubmitRealName(ctx context.Context, gameID, platformAccountID, platformToken, realName, idNumber string) (*RealNameData, *Fault) {
-	if !svc.realNameMock {
-		// 真实 provider 对接点:厂商接入属平台采购;接口就位前生产明确失败。
-		return nil, fault(503, result.ReasonPlatformUnavailable, "实名核验服务未配置(生产须对接真实核验源)")
+// resolvePending 经 NPPA 查询接口尝试为"认证中"账户定案;查询失败则保持 pending 留待下次。
+func (svc *Service) resolvePending(ctx context.Context, gameID, platformAccountID string, st *store.RealNameState) *store.RealNameState {
+	creds, err := svc.store.GetGameNppaCreds(ctx, gameID)
+	if err != nil {
+		return st
 	}
+	nc := nppa.Creds{AppID: creds.AppID, BizID: creds.BizID, SecretKey: creds.SecretKey}
+	if !nc.Ready() {
+		return st
+	}
+	res, qerr := nppa.Query(ctx, svc.httpClient, nc, svc.nppaQueryURL, st.AI, svc.now())
+	if qerr != nil {
+		return st
+	}
+	switch res.Status {
+	case nppa.StatusSuccess:
+		_ = svc.store.MarkRealNameVerified(ctx, platformAccountID, res.PI)
+	case nppa.StatusFailed:
+		_ = svc.store.MarkRealNameFailed(ctx, platformAccountID)
+	default: // 仍认证中
+		return st
+	}
+	if reloaded, rerr := svc.store.GetRealName(ctx, platformAccountID); rerr == nil {
+		return reloaded
+	}
+	return st
+}
+
+// SubmitRealName dev=mock(格式 + 出生日期);生产=NPPA 真认证(per-game 凭据,ADR-0007),
+// 未配置凭据 fail-closed;异步"认证中"按(a)懒查询定案。
+func (svc *Service) SubmitRealName(ctx context.Context, gameID, platformAccountID, platformToken, realName, idNumber string) (*RealNameData, *Fault) {
 	if f := svc.requirePlatformSession(ctx, gameID, platformAccountID, platformToken); f != nil {
 		return nil, f
 	}
@@ -114,15 +147,66 @@ func (svc *Service) SubmitRealName(ctx context.Context, gameID, platformAccountI
 		return nil, fault(400, result.ReasonParamInvalid, "身份证出生日期非法")
 	}
 	adult := age(birth, svc.now()) >= 18
-	st, err2 := svc.store.SubmitRealName(ctx, platformAccountID, maskName(realName), maskID(idNumber), adult)
-	if err2 != nil {
+
+	// 已实名锁定:幂等返回当前态,不重复核验。
+	if cur, gerr := svc.store.GetRealName(ctx, platformAccountID); gerr == nil && cur.Verified {
+		return svc.gatesOrFault(ctx, gameID, platformAccountID, cur)
+	}
+
+	if svc.realNameMock {
+		st, serr := svc.store.SubmitRealName(ctx, platformAccountID, maskName(realName), maskID(idNumber), adult)
+		if serr != nil {
+			return nil, fault(503, result.ReasonPlatformUnavailable, "实名提交失败")
+		}
+		return svc.gatesOrFault(ctx, gameID, platformAccountID, st)
+	}
+
+	// 生产 NPPA 路径
+	creds, cerr := svc.store.GetGameNppaCreds(ctx, gameID)
+	if cerr != nil {
+		return nil, fault(503, result.ReasonPlatformUnavailable, "实名核验服务未配置")
+	}
+	nc := nppa.Creds{AppID: creds.AppID, BizID: creds.BizID, SecretKey: creds.SecretKey}
+	if !nc.Ready() {
+		// 该游戏未提供 NPPA 凭据(接入者未授权)→ fail-closed。
+		return nil, fault(503, result.ReasonPlatformUnavailable, "实名核验服务未配置(该游戏未提供 NPPA 凭据)")
+	}
+	ai := genHexID()
+	if serr := svc.store.StageRealName(ctx, platformAccountID, ai, maskName(realName), maskID(idNumber), adult); serr != nil {
 		return nil, fault(503, result.ReasonPlatformUnavailable, "实名提交失败")
 	}
-	d, err3 := svc.realNameGates(ctx, gameID, platformAccountID, st)
-	if err3 != nil {
+	res, nerr := nppa.Check(ctx, svc.httpClient, nc, svc.nppaCheckURL, ai, realName, idNumber, svc.now())
+	if nerr != nil {
+		return nil, fault(503, result.ReasonPlatformUnavailable, "实名核验失败")
+	}
+	switch res.Status {
+	case nppa.StatusSuccess:
+		if merr := svc.store.MarkRealNameVerified(ctx, platformAccountID, res.PI); merr != nil {
+			return nil, fault(503, result.ReasonPlatformUnavailable, "实名提交失败")
+		}
+		return svc.gatesOrFault(ctx, gameID, platformAccountID, &store.RealNameState{Verified: true, Adult: adult, PI: res.PI})
+	case nppa.StatusFailed:
+		_ = svc.store.MarkRealNameFailed(ctx, platformAccountID)
+		return nil, fault(400, result.ReasonParamInvalid, "实名认证未通过(姓名与身份证不匹配)")
+	default: // StatusPending 认证中
+		_ = svc.store.MarkRealNamePending(ctx, platformAccountID)
+		return svc.gatesOrFault(ctx, gameID, platformAccountID, &store.RealNameState{Pending: true, Adult: adult})
+	}
+}
+
+func (svc *Service) gatesOrFault(ctx context.Context, gameID, platformAccountID string, st *store.RealNameState) (*RealNameData, *Fault) {
+	d, err := svc.realNameGates(ctx, gameID, platformAccountID, st)
+	if err != nil {
 		return nil, fault(503, result.ReasonPlatformUnavailable, "门禁判定失败")
 	}
 	return d, nil
+}
+
+// genHexID 生成 32 位 hex(NPPA ai:游戏内唯一标识,每次提交不可复用)。
+func genHexID() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
 }
 
 // ---------- #13 小号 ----------

@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"time"
 
+	"m5755/server/internal/nppa"
 	"m5755/server/internal/result"
 	"m5755/server/internal/sms"
 	"m5755/server/internal/store"
@@ -43,6 +44,8 @@ type Service struct {
 	smsMock        bool // dev=true(返回 devCode 供联调);prod=false(京东云真发,响应不含 devCode)
 	smsConfig      sms.Config
 	httpClient     *http.Client
+	nppaCheckURL   string // NPPA 认证接口地址(默认线上,测试覆盖)
+	nppaQueryURL   string // NPPA 查询接口地址
 }
 
 // Options 注入生产/联调差异(M4-S3:密钥环境注入,不再源码常量)。
@@ -51,6 +54,8 @@ type Options struct {
 	RealNameMock   bool
 	SmsMock        bool       // 缺省 false;dev bootstrap 显式置 true
 	SmsConfig      sms.Config // smsMock=false 时用于京东云发送
+	NppaCheckURL   string     // 缺省线上 NPPA 认证地址;测试覆盖
+	NppaQueryURL   string     // 缺省线上 NPPA 查询地址;测试覆盖
 }
 
 func New(s *store.Store) *Service {
@@ -59,10 +64,19 @@ func New(s *store.Store) *Service {
 }
 
 func NewWith(s *store.Store, opt Options) *Service {
+	checkURL := opt.NppaCheckURL
+	if checkURL == "" {
+		checkURL = nppa.DefaultCheckURL
+	}
+	queryURL := opt.NppaQueryURL
+	if queryURL == "" {
+		queryURL = nppa.DefaultQueryURL
+	}
 	return &Service{
 		store: s, now: time.Now, callbackSecret: opt.CallbackSecret,
 		realNameMock: opt.RealNameMock, smsMock: opt.SmsMock, smsConfig: opt.SmsConfig,
-		httpClient: &http.Client{Timeout: 10 * time.Second},
+		httpClient:   &http.Client{Timeout: 10 * time.Second},
+		nppaCheckURL: checkURL, nppaQueryURL: queryURL,
 	}
 }
 
