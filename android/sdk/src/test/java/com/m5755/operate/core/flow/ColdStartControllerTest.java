@@ -666,6 +666,10 @@ public class ColdStartControllerTest {
             calls.add("showAutoEnterPrompt:" + account);
         }
 
+        public void showAutoLoginPrompt(String displayName) {
+            calls.add("showAutoLoginPrompt");
+        }
+
         public void showPickerNotice(String message) {
             calls.add("showPickerNotice");
         }

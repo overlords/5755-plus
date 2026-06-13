@@ -117,12 +117,34 @@ public final class SdkUi implements FlowUi {
     }
 
     @Override
+    public void showAutoLoginPrompt(final String displayName) {
+        main.post(new Runnable() {
+            public void run() {
+                toast(displayName == null || displayName.isEmpty()
+                        ? "正在自动登录…" : "正在以 " + displayName + " 自动登录");
+            }
+        });
+    }
+
+    @Override
     public void showLoginError(final String reason, final String message) {
         main.post(new Runnable() {
             public void run() {
+                resetSendCodeButton(); // 发送失败后复位,不卡"发送中"
                 toast(loginErrorText(reason, message));
             }
         });
+    }
+
+    /** 复位验证码发送按钮(发送失败时不卡"发送中")。 */
+    private void resetSendCodeButton() {
+        if (sendCodeButton == null) {
+            return;
+        }
+        main.removeCallbacks(countdownTick);
+        sendCodeButton.setEnabled(true);
+        sendCodeButton.setText("发送验证码");
+        sendCodeButton.setTextColor(UiKit.PRIMARY_DEEP);
     }
 
     @Override
@@ -942,6 +964,7 @@ public final class SdkUi implements FlowUi {
 
         final android.widget.EditText phone = UiKit.input(host, "请输入手机号");
         phone.setInputType(android.text.InputType.TYPE_CLASS_PHONE);
+        phone.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(11)}); // 手机号 11 位上限
         card.addView(phone);
 
         // 内嵌按钮输入行:验证码 + 发送验证码
@@ -1016,8 +1039,8 @@ public final class SdkUi implements FlowUi {
         sendCodeButton.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 final String p = phone.getText().toString().trim();
-                if (p.isEmpty()) {
-                    toast("请输入手机号");
+                if (!p.matches("^1\\d{10}$")) {
+                    toast("请输入正确的 11 位手机号");
                     return;
                 }
                 sendCodeButton.setEnabled(false);

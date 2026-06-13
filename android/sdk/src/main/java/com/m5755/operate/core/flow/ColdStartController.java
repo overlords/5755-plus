@@ -156,6 +156,7 @@ public final class ColdStartController {
             return;
         }
         this.displayName = chk.displayName == null ? "" : chk.displayName;
+        ui.showAutoLoginPrompt(this.displayName); // #6:自动登录有指示,不静默跳门禁
         enterRealNameStage();
     }
 

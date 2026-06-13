@@ -32,6 +32,9 @@ public interface FlowUi {
     /** 协议被拒绝:阻断进入流程(不杀进程、不触发账号变化)。 */
     void onEntryBlockedByProtocolReject();
 
+    /** 自动登录提示(#6):重进 APP 以有效会话自动登录时,先给提示再进门禁。 */
+    void showAutoLoginPrompt(String displayName);
+
     // ===== 里程碑 2(#16-#18) =====
 
     /** 实名认证页(07 §7):未实名账户必经。 */
