@@ -369,87 +369,75 @@ public final class SdkUi implements FlowUi {
         LinearLayout rows = new LinearLayout(host);
         rows.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(rows);
-        // 设计系统 SubAccountRow(精确还原):白卡(≥70dp/14dp 圆角/细边/软阴影)+ 左上角「默认」圆选 tab + 右侧金圆 chevron 箭头
+        // 小号行:忠实搬旧 m5755 smallAccountItem(还原度口径)——48dp 白卡/3dp 圆角/LINE 细边/elevation 2;
+        // 名 14sp 粗;右侧 20dp 金圆 + chevron 矢量图(tint #5D4300);左上角「默认」徽标(圆选 + 标签)。
+        int rowIdx = 0;
         for (final Results.SubaccountList.Item it : list.items) {
             FrameLayout wrap = new FrameLayout(host);
+            wrap.setClickable(true);
 
-            LinearLayout cardRow = new LinearLayout(host);
-            cardRow.setOrientation(LinearLayout.HORIZONTAL);
-            cardRow.setGravity(Gravity.CENTER_VERTICAL);
-            cardRow.setBackground(UiKit.roundedStroke(UiKit.WHITE, UiKit.dp(host, 14), UiKit.LINE, UiKit.dp(host, 1)));
-            cardRow.setElevation(UiKit.dp(host, 3));
-            cardRow.setPadding(UiKit.dp(host, 20), 0, UiKit.dp(host, 14), 0); // 无垂直 padding,名称居中
-            FrameLayout.LayoutParams crLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 70));
-            crLp.topMargin = UiKit.dp(host, 11);
+            FrameLayout item = new FrameLayout(host);
+            item.setBackground(UiKit.roundedStroke(UiKit.WHITE, UiKit.dp(host, 3), UiKit.LINE, UiKit.dp(host, 1)));
+            item.setElevation(UiKit.dp(host, 2));
+            FrameLayout.LayoutParams itemLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 48), Gravity.TOP);
+            itemLp.topMargin = UiKit.dp(host, 14);
+            wrap.addView(item, itemLp);
 
             TextView nameTv = new TextView(host);
             nameTv.setText(it.displayName);
-            nameTv.setTextSize(16);
+            nameTv.setTextSize(14);
             nameTv.setTextColor(UiKit.TEXT);
             nameTv.getPaint().setFakeBoldText(true);
-            cardRow.addView(nameTv);
-            View spacer = new View(host);
-            cardRow.addView(spacer, new LinearLayout.LayoutParams(0, 1, 1));
+            nameTv.setIncludeFontPadding(false);
+            nameTv.setGravity(Gravity.CENTER_VERTICAL);
+            FrameLayout.LayoutParams nameLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+            nameLp.leftMargin = UiKit.dp(host, 16);
+            nameLp.rightMargin = UiKit.dp(host, 56);
+            item.addView(nameTv, nameLp);
 
-            FrameLayout arrowWrap = new FrameLayout(host); // 32dp 金圆 + chevron
-            arrowWrap.setBackground(UiKit.rounded(UiKit.PRIMARY, UiKit.dp(host, 999)));
-            View chevron = new View(host) {
-                private final android.graphics.Paint pp = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
-                @Override
-                protected void onDraw(android.graphics.Canvas c) {
-                    int w = getWidth(), h = getHeight();
-                    pp.setColor(0xFF5D4300);
-                    pp.setStyle(android.graphics.Paint.Style.STROKE);
-                    pp.setStrokeWidth(w * 2.4f / 24f);
-                    pp.setStrokeCap(android.graphics.Paint.Cap.ROUND);
-                    pp.setStrokeJoin(android.graphics.Paint.Join.ROUND);
-                    float sx = w / 24f, sy = h / 24f;
-                    android.graphics.Path path = new android.graphics.Path();
-                    path.moveTo(9 * sx, 6 * sy);
-                    path.lineTo(15 * sx, 12 * sy);
-                    path.lineTo(9 * sx, 18 * sy);
-                    c.drawPath(path, pp);
-                }
-            };
-            FrameLayout.LayoutParams chLp = new FrameLayout.LayoutParams(UiKit.dp(host, 15), UiKit.dp(host, 15));
-            chLp.gravity = Gravity.CENTER;
-            arrowWrap.addView(chevron, chLp);
-            cardRow.addView(arrowWrap, new LinearLayout.LayoutParams(UiKit.dp(host, 32), UiKit.dp(host, 32)));
+            android.widget.ImageView enter = new android.widget.ImageView(host);
+            enter.setContentDescription("进入");
+            enter.setBackground(UiKit.rounded(UiKit.PRIMARY, UiKit.dp(host, 999)));
+            enter.setImageResource(com.m5755.operate.R.drawable.m5755_ic_chevron_right_24);
+            enter.setColorFilter(UiKit.BTN_TEXT_ON_PRIMARY);
+            enter.setScaleType(android.widget.ImageView.ScaleType.CENTER);
+            enter.setPadding(UiKit.dp(host, 3), UiKit.dp(host, 3), UiKit.dp(host, 3), UiKit.dp(host, 3));
+            FrameLayout.LayoutParams enLp = new FrameLayout.LayoutParams(UiKit.dp(host, 20), UiKit.dp(host, 20), Gravity.END | Gravity.CENTER_VERTICAL);
+            enLp.rightMargin = UiKit.dp(host, 8);
+            item.addView(enter, enLp);
 
-            wrap.addView(cardRow, crLp);
-
-            // 「默认」tab:7px 白药丸 + 16dp 圆选 + 标签,骑卡片左上角
-            final LinearLayout tab = new LinearLayout(host);
-            tab.setOrientation(LinearLayout.HORIZONTAL);
-            tab.setGravity(Gravity.CENTER_VERTICAL);
-            tab.setBackground(UiKit.roundedStroke(UiKit.WHITE, UiKit.dp(host, 7), UiKit.LINE, UiKit.dp(host, 1)));
-            tab.setElevation(UiKit.dp(host, 2));
-            tab.setPadding(UiKit.dp(host, 10), 0, UiKit.dp(host, 10), 0);
+            // 「默认」徽标:6dp 药丸 + 14dp 圆选 + 标签,骑左上角(左2/上8)
+            final LinearLayout badge = new LinearLayout(host);
+            badge.setOrientation(LinearLayout.HORIZONTAL);
+            badge.setGravity(Gravity.CENTER_VERTICAL);
+            badge.setPadding(UiKit.dp(host, 6), 0, UiKit.dp(host, 7), 0);
+            badge.setBackground(UiKit.roundedStroke(UiKit.WHITE, UiKit.dp(host, 6), UiKit.LINE, UiKit.dp(host, 1)));
+            badge.setElevation(UiKit.dp(host, 4));
             TextView radio = new TextView(host);
-            radio.setGravity(Gravity.CENTER);
+            radio.setText(it.isDefault ? "✓" : "");
             radio.setTextSize(10);
-            if (it.isDefault) {
-                radio.setText("✓");
-                radio.setTextColor(UiKit.BTN_TEXT_ON_PRIMARY);
-                radio.setBackground(UiKit.rounded(UiKit.PRIMARY, UiKit.dp(host, 999)));
-            } else {
-                radio.setText("");
-                radio.setBackground(UiKit.roundedStroke(UiKit.WHITE, UiKit.dp(host, 999), 0xFFD5D7DD, UiKit.dp(host, 1)));
-            }
-            LinearLayout.LayoutParams radLp = new LinearLayout.LayoutParams(UiKit.dp(host, 16), UiKit.dp(host, 16));
-            radLp.rightMargin = UiKit.dp(host, 7);
-            tab.addView(radio, radLp);
-            TextView tlabel = new TextView(host);
-            tlabel.setText("默认");
-            tlabel.setTextSize(12);
-            tlabel.setTextColor(it.isDefault ? UiKit.PRIMARY_DEEP : UiKit.MUTED);
-            tab.addView(tlabel);
-            FrameLayout.LayoutParams tabLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, UiKit.dp(host, 24));
-            tabLp.leftMargin = UiKit.dp(host, 16);
-            wrap.addView(tab, tabLp);
+            radio.getPaint().setFakeBoldText(true);
+            radio.setIncludeFontPadding(false);
+            radio.setGravity(Gravity.CENTER);
+            radio.setTextColor(UiKit.BTN_TEXT_ON_PRIMARY);
+            radio.setBackground(it.isDefault
+                    ? UiKit.rounded(UiKit.PRIMARY, UiKit.dp(host, 999))
+                    : UiKit.roundedStroke(UiKit.WHITE, UiKit.dp(host, 999), UiKit.LINE, UiKit.dp(host, 1)));
+            LinearLayout.LayoutParams radLp = new LinearLayout.LayoutParams(UiKit.dp(host, 14), UiKit.dp(host, 14));
+            radLp.rightMargin = UiKit.dp(host, 4);
+            badge.addView(radio, radLp);
+            TextView dtext = new TextView(host);
+            dtext.setText("默认");
+            dtext.setTextSize(10);
+            dtext.setTextColor(UiKit.MUTED);
+            dtext.setIncludeFontPadding(false);
+            badge.addView(dtext, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, UiKit.dp(host, 20)));
+            FrameLayout.LayoutParams badgeLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, UiKit.dp(host, 20), Gravity.START | Gravity.TOP);
+            badgeLp.leftMargin = UiKit.dp(host, 2);
+            badgeLp.topMargin = UiKit.dp(host, 8);
+            wrap.addView(badge, badgeLp);
 
-            cardRow.setClickable(true);
-            cardRow.setOnClickListener(new View.OnClickListener() {
+            wrap.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
                     background.execute(new Runnable() {
                         public void run() {
@@ -458,25 +446,28 @@ public final class SdkUi implements FlowUi {
                     });
                 }
             });
-            tab.setOnClickListener(new View.OnClickListener() {
+            badge.setClickable(true);
+            badge.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
                     background.execute(new Runnable() {
                         public void run() {
-                            controller.onSetDefault(it.account, switchFlow); // 点默认 tab≠点卡进入
+                            controller.onSetDefault(it.account, switchFlow); // 点默认徽标≠点行进入
                         }
                     });
                 }
             });
-            LinearLayout.LayoutParams wrapLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 85));
-            wrapLp.topMargin = UiKit.dp(host, 8);
+            LinearLayout.LayoutParams wrapLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 62));
+            wrapLp.topMargin = UiKit.dp(host, rowIdx == 0 ? 12 : 6);
+            rowIdx++;
             rows.addView(wrap, wrapLp);
         }
         LinearLayout.LayoutParams scLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        scroll.setClipToPadding(false); // 卡片阴影不被裁
-        scroll.setPadding(UiKit.dp(host, 2), UiKit.dp(host, 2), UiKit.dp(host, 2), UiKit.dp(host, 4));
-        scLp.topMargin = UiKit.dp(host, 8);
-        int maxH = UiKit.dp(host, 320);
-        scLp.height = Math.min(maxH, UiKit.dp(host, 89) * Math.max(1, list.items.size()));
+        scroll.setBackground(UiKit.rounded(UiKit.WEAK, UiKit.dp(host, 10)));
+        scroll.setClipToPadding(false);
+        scroll.setPadding(UiKit.dp(host, 6), UiKit.dp(host, 2), UiKit.dp(host, 16), UiKit.dp(host, 8));
+        scLp.topMargin = UiKit.dp(host, 10);
+        int maxH = UiKit.dp(host, 300);
+        scLp.height = Math.min(maxH, UiKit.dp(host, 62) * Math.max(1, list.items.size()) + UiKit.dp(host, 10));
         card.addView(scroll, scLp);
 
         TextView tip = new TextView(host);
