@@ -300,62 +300,113 @@ public final class SdkUi implements FlowUi {
     }
 
     private void mountPicker(final Results.SubaccountList list, String nickname, final boolean switchFlow) {
-        LinearLayout card = UiKit.modalCard(host, 560);
-        // 头部:昵称 + 关闭
+        // 固定高分段面板(还原生产 m5755):白底圆角 14;表头 64dp / 分隔线 / WEAK body(weight 填满)。
+        android.util.DisplayMetrics dm = host.getResources().getDisplayMetrics();
+        final int fixedH = Math.min(UiKit.dp(host, 430), Math.max(UiKit.dp(host, 320), dm.heightPixels - UiKit.dp(host, 70)));
+        final int fixedW = Math.min(UiKit.dp(host, 480), dm.widthPixels - UiKit.dp(host, 40));
+
+        LinearLayout card = new LinearLayout(host);
+        card.setOrientation(LinearLayout.VERTICAL);
+        card.setBackground(UiKit.rounded(UiKit.WHITE, UiKit.dp(host, 14)));
+        card.setElevation(UiKit.dp(host, 18));
+        card.setClipToOutline(true); // WEAK body 裁到圆角内
+
+        // 表头:昵称 + ⇄ 切换5755账户(MUTED)
         LinearLayout header = new LinearLayout(host);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setBackgroundColor(UiKit.WHITE);
+        header.setPadding(UiKit.dp(host, 24), 0, UiKit.dp(host, 24), 0);
         TextView nick = new TextView(host);
         nick.setText(nickname == null || nickname.isEmpty() ? "5755玩家" : nickname);
         nick.setTextSize(17);
         nick.setTextColor(UiKit.TEXT);
         nick.getPaint().setFakeBoldText(true);
+        nick.setSingleLine(true);
+        nick.setEllipsize(android.text.TextUtils.TruncateAt.END);
         header.addView(nick, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-        TextView close = new TextView(host);
-        close.setText("×");
-        close.setTextSize(22);
-        close.setTextColor(0xFFA4A8B0);
-        close.setGravity(Gravity.CENTER);
-        close.setWidth(UiKit.dp(host, 42));
-        close.setHeight(UiKit.dp(host, 42));
-        close.setBackground(UiKit.roundedStroke(UiKit.WHITE, UiKit.dp(host, 21), 0xFFDEE1E8, UiKit.dp(host, 1)));
-        header.addView(close);
-        card.addView(header, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 52)));
-        close.setOnClickListener(new View.OnClickListener() {
+        TextView switchAcc = new TextView(host);
+        switchAcc.setText("⇄");
+        switchAcc.setTextSize(22);
+        switchAcc.setTextColor(UiKit.MUTED);
+        switchAcc.setGravity(Gravity.CENTER);
+        switchAcc.setContentDescription("切换5755账户");
+        header.addView(switchAcc, new LinearLayout.LayoutParams(UiKit.dp(host, 42), UiKit.dp(host, 42)));
+        card.addView(header, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 64)));
+        switchAcc.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
-                dismiss(); // 登录链路=进入未完成;切换链路=取消保持当前(03 §4.4)
                 background.execute(new Runnable() {
                     public void run() {
-                        controller.onPickerClosed(switchFlow);
+                        controller.logout(); // ⇄=切换5755账户:清理并回登录窗(03 §6)
                     }
                 });
             }
         });
 
-        // 标题行 + 添加小号
+        // 分隔线
+        View divider = new View(host);
+        divider.setBackgroundColor(UiKit.LINE);
+        card.addView(divider, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 1));
+
+        // body(weight 1,WEAK 底)
+        LinearLayout body = new LinearLayout(host);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setBackgroundColor(UiKit.WEAK);
+        body.setPadding(UiKit.dp(host, 24), UiKit.dp(host, 12), UiKit.dp(host, 24), UiKit.dp(host, 8));
+        card.addView(body, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
+
+        // 标题行:选择小号进入游戏 + ! 信息标 + 添加小号
         LinearLayout titleRow = new LinearLayout(host);
         titleRow.setOrientation(LinearLayout.HORIZONTAL);
         titleRow.setGravity(Gravity.CENTER_VERTICAL);
+        LinearLayout titleText = new LinearLayout(host);
+        titleText.setOrientation(LinearLayout.HORIZONTAL);
+        titleText.setGravity(Gravity.CENTER_VERTICAL);
         TextView st = new TextView(host);
         st.setText("选择小号进入游戏");
-        st.setTextSize(15);
+        st.setTextSize(16);
         st.setTextColor(UiKit.TEXT);
         st.getPaint().setFakeBoldText(true);
-        titleRow.addView(st, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        titleText.addView(st);
+        TextView info = new TextView(host);
+        info.setText("!");
+        info.setTextSize(11);
+        info.setTextColor(UiKit.MUTED);
+        info.getPaint().setFakeBoldText(true);
+        info.setGravity(Gravity.CENTER);
+        info.setIncludeFontPadding(false);
+        info.setBackground(UiKit.roundedStroke(UiKit.WHITE, UiKit.dp(host, 999), UiKit.LINE, UiKit.dp(host, 1)));
+        LinearLayout.LayoutParams infoLp = new LinearLayout.LayoutParams(UiKit.dp(host, 18), UiKit.dp(host, 18));
+        infoLp.leftMargin = UiKit.dp(host, 8);
+        titleText.addView(info, infoLp);
+        titleRow.addView(titleText, new LinearLayout.LayoutParams(0, UiKit.dp(host, 36), 1));
+        info.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                toast("游戏小号是你在本游戏内的角色账号,由平台分配;点「默认」可设为下次自动登录的小号。");
+            }
+        });
+
+        final boolean full = list.items.size() >= 10;
         TextView add = new TextView(host);
         add.setText("添加小号");
         add.setTextSize(13);
-        add.setTextColor(UiKit.PRIMARY_DEEP);
         add.getPaint().setFakeBoldText(true);
         add.setGravity(Gravity.CENTER);
-        add.setPadding(UiKit.dp(host, 14), UiKit.dp(host, 6), UiKit.dp(host, 14), UiKit.dp(host, 6));
-        add.setBackground(UiKit.roundedStroke(0x00000000, UiKit.dp(host, 8), UiKit.PRIMARY_DEEP, UiKit.dp(host, 1)));
-        titleRow.addView(add);
-        LinearLayout.LayoutParams trLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        trLp.topMargin = UiKit.dp(host, 10);
-        card.addView(titleRow, trLp);
+        if (full) {
+            add.setTextColor(0xFFA6A9B0);
+            add.setBackground(UiKit.roundedStroke(UiKit.WHITE, UiKit.dp(host, 8), UiKit.LINE, UiKit.dp(host, 1)));
+        } else {
+            add.setTextColor(UiKit.PRIMARY_DEEP);
+            add.setBackground(UiKit.roundedStroke(UiKit.WHITE, UiKit.dp(host, 8), UiKit.PRIMARY_DEEP, UiKit.dp(host, 1)));
+        }
+        titleRow.addView(add, new LinearLayout.LayoutParams(UiKit.dp(host, 86), UiKit.dp(host, 32)));
+        body.addView(titleRow, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 36)));
         add.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
+                if (full) {
+                    toast("最多添加10个小号哦");
+                    return;
+                }
                 background.execute(new Runnable() {
                     public void run() {
                         controller.onAddSubaccount(switchFlow);
@@ -364,11 +415,25 @@ public final class SdkUi implements FlowUi {
             }
         });
 
-        // 列表(可滚动,300dp 上限)
+        // 列表(weight 1 填满 body 余高;>3 时右侧 3dp 金色滚动条装饰)
+        FrameLayout listFrame = new FrameLayout(host);
         android.widget.ScrollView scroll = new android.widget.ScrollView(host);
+        scroll.setVerticalScrollBarEnabled(false);
+        scroll.setClipToPadding(false);
+        scroll.setPadding(0, 0, UiKit.dp(host, 16), UiKit.dp(host, 8));
         LinearLayout rows = new LinearLayout(host);
         rows.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(rows);
+        listFrame.addView(scroll, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        if (list.items.size() > 3) {
+            View thumb = new View(host);
+            thumb.setBackground(UiKit.rounded(UiKit.PRIMARY, UiKit.dp(host, 999)));
+            FrameLayout.LayoutParams thumbLp = new FrameLayout.LayoutParams(UiKit.dp(host, 3), UiKit.dp(host, 70), Gravity.END | Gravity.TOP);
+            thumbLp.topMargin = UiKit.dp(host, 12);
+            thumbLp.rightMargin = UiKit.dp(host, 3);
+            listFrame.addView(thumb, thumbLp);
+        }
+        body.addView(listFrame, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
         // 小号行:忠实搬旧 m5755 smallAccountItem(还原度口径)——48dp 白卡/3dp 圆角/LINE 细边/elevation 2;
         // 名 14sp 粗;右侧 20dp 金圆 + chevron 矢量图(tint #5D4300);左上角「默认」徽标(圆选 + 标签)。
         int rowIdx = 0;
@@ -461,24 +526,11 @@ public final class SdkUi implements FlowUi {
             rowIdx++;
             rows.addView(wrap, wrapLp);
         }
-        LinearLayout.LayoutParams scLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        scroll.setBackground(UiKit.rounded(UiKit.WEAK, UiKit.dp(host, 10)));
-        scroll.setClipToPadding(false);
-        scroll.setPadding(UiKit.dp(host, 6), UiKit.dp(host, 2), UiKit.dp(host, 16), UiKit.dp(host, 8));
-        scLp.topMargin = UiKit.dp(host, 10);
-        int maxH = UiKit.dp(host, 300);
-        scLp.height = Math.min(maxH, UiKit.dp(host, 62) * Math.max(1, list.items.size()) + UiKit.dp(host, 10));
-        card.addView(scroll, scLp);
-
-        TextView tip = new TextView(host);
-        tip.setText("点击小号进入游戏,点击「默认」设为下次自动登录的小号。");
-        tip.setTextSize(12);
-        tip.setTextColor(UiKit.MUTED);
-        LinearLayout.LayoutParams tipLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        tipLp.topMargin = UiKit.dp(host, 12);
-        card.addView(tip, tipLp);
-
         mount(card);
+        // 固定面板尺寸(mount 默认 WRAP_CONTENT;此处压成定宽高,让 body weight 撑开)
+        card.getLayoutParams().width = fixedW;
+        card.getLayoutParams().height = fixedH;
+        card.requestLayout();
     }
 
     private void mountAutoEnter(final String account, String displayName) {

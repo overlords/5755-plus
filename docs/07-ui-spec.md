@@ -254,31 +254,30 @@ smallText 行距 +2dp;hint 行距 +3dp。粗体使用 `Typeface.DEFAULT` + `Type
 
 - **用途与触发**:登录成功后(无默认小号或主动切换小号时)选择进入游戏的小号。
 - **数据**:`accountsPayload` 格式 `id|label,id|label,…`(label 缺省为 `小号:{id}`);另有 `defaultAccountId`(默认小号)、`currentLoginId`(当前登录小号)、`accountNickname`(5755 账号昵称,缺省 `5755玩家`)。**新实现:小号数据一律来自服务端;payload 为空属平台侧异常(平台保障首个小号),不渲染本页,由状态机阻断登录并输出诊断,不得伪造小号。**
-- **容器(底部圆角面板,居中)**:
-  - 白色面板,圆角 **14dp**,elevation 18,clipToOutline。
-  - 宽度:`min( max(360dp, 屏宽-52dp), max(420dp, 目标宽) )`,目标宽 = 屏宽≥720dp 时 `屏宽-380dp`,否则 `屏宽-48dp`。
-  - 高度:`min(430dp, max(320dp, 屏高-70dp))`;整体相对屏幕中心上移 22dp。
-  - **圆形关闭按钮"×"**:42dp 圆形,白底、`#DEE1E8` 1dp 描边、文字 `#A4A8B0` 22sp,**骑跨面板右上角**(圆心对准面板角),elevation 22,contentDescription `关闭小号选择页`。
+- **容器(居中固定面板)**:
+  - 白色面板,圆角 **14dp**,elevation 18,clipToOutline(让 `WEAK` 主体裁进圆角)。
+  - 宽度:`min(480dp, 屏宽-40dp)`;高度:`min(430dp, max(320dp, 屏高-70dp))`,屏幕居中。
+  - **无独立"×"关闭**:本页为进入游戏的必经选择(还原图示),退出经表头 `⇄`(切换 5755 账户)或选定小号。〔旧 m5755 另有骑右上角 `×`(→取消保持当前);如需恢复见交互节备注。〕
 - **头部**(高 64dp,白底,水平 padding 24dp):
   - 左:5755 昵称(默认 `5755玩家`),17sp 粗体 `TEXT`,单行尾部省略。
   - 右:切换按钮 `⇄`,42×42dp,透明底、`MUTED` 22sp,contentDescription `切换5755账户`。
   - 下方 1dp `LINE` 分割线。
 - **主体**(底色 `WEAK`,padding 24/12/24/8):
   - **标题行**(高 36dp):左 `选择小号进入游戏` 16sp 粗体 + `!` 信息圆标(18×18dp,白底 LINE 描边圆形,11sp 粗体 `MUTED`,左距 8dp);右 `添加小号` 按钮 **86×32dp**,白底圆角 8dp、文字 13sp:正常态文字与描边 `PRIMARY_DEEP`;**满 10 个**时文字 `#A6A9B0`、描边 `LINE`。
-  - **小号列表**(ScrollView,底色 `WEAK`、圆角 10dp;行高 62dp、首行顶距 12dp、其余 6dp、列表右 padding 16dp;上限 300dp,超过可滚):
+  - **小号列表**(ScrollView,**weight 撑满主体余高**、透明叠在 `WEAK` 主体上;行高 62dp、首行顶距 12dp、其余 6dp、列表右 padding 16dp;**超过 3 条**时右侧 3dp×70dp `PRIMARY` 圆角滚动条装饰,距顶 12dp、距右 3dp):
     - **小号行**(smallAccountItem,**还原度以生产 m5755 为准**;设计系统 `SubAccountRow` 卡片尺寸另有一版,以本节生产值为准):外层 `FrameLayout` 可点;内层卡片高 **48dp**、顶距 14dp(给徽标留叠放空间)、白底圆角 **3dp**、`LINE` 1dp 描边、elevation 2。
       - 名称:label,**14sp 粗体** `TEXT`,左距 16dp、右距 56dp,垂直居中。
       - `当前登录` 标签(仅当前登录小号,当前 Item 模型未带该标志时省略):12sp 粗体 `#5D4300`,底 `#FFF9DF` 圆角 3dp,高 24dp,名称右侧 8dp。
       - 右侧进入箭头:**20dp 圆形** `PRIMARY` 底 + 右箭头矢量图(`m5755_ic_chevron_right_24`,colorFilter `#5D4300`,CENTER,padding 3),距右 8dp,contentDescription `进入`。
       - **默认徽标**(骑左上角,偏移 左2dp/上8dp):白底圆角 6dp、`LINE` 描边、高 20dp、elevation 4;内含 **14dp 圆形单选**(选中:`PRIMARY` 圆底 + ✓ 10sp `#5D4300`;未选中:白底 `LINE` 描边)+ `默认` 文字 10sp `MUTED`。点徽标设默认(不进入)。
-- **文案清单**:`选择小号进入游戏`、`添加小号`、`当前登录`、`默认`、`已设置默认小号`(toast)、`最多添加10个小号哦`(上限 toast)、`1个游戏下最多创建10个小号,每个小号独立`(说明弹窗,原文含换行)、`我知道了`、contentDescription:`关闭小号选择页`/`切换5755账户`/`进入`。
-- **交互与回调**:
-  - 点小号行 → 记录当前小号 + `onSubAccountSelected(id)` → 进入登录态校验弹窗(valid=true)。
-  - 点默认徽标 → `onDefaultSubAccountSelected(id)` + 以该 id 为默认重渲染本页 + toast `已设置默认小号`。
-  - 点 `添加小号`:已满 10 个 → 白色上限 toast `最多添加10个小号哦`(见 1.6);未满 → `onAddSubAccountRequested()`;添加结果经 `showSubAccountAddResult(message, success)` 以黑色 toast 显示 message。
-  - 点 `!` → 居中说明小弹窗:二级遮罩 `#66000000`;白卡圆角 8dp,宽 `min(330dp, max(300dp, 屏宽-220dp))`;正文 18sp `TEXT` 行距+6dp、padding 22/18、高 96dp;1dp 分割线;`我知道了` 18sp 粗体 `#5D4300` 高 42dp 居中,点击仅关闭该小弹窗。
-  - 点 `⇄` → 关闭层 + `on5755AccountSwitchRequested()`(切换 5755 主账号)。
-  - 点 `×` → 关闭层 + `onClosed("subaccount")`。
+- **文案清单**:`选择小号进入游戏`、`添加小号`、`当前登录`(标签,Item 暂未带标志时不渲染)、`默认`、`已设置默认小号`(toast)、`最多添加10个小号哦`(上限 toast)、`游戏小号是你在本游戏内的角色账号,由平台分配;点「默认」可设为下次自动登录的小号。`(`!` 信息 toast)、contentDescription:`切换5755账户`/`进入`。
+- **交互与回调**(回调走 `ColdStartController`,均带 `switchFlow`):
+  - 点小号行 → `onSubaccountChosen(account, switchFlow)` → 进入登录态校验弹窗(valid=true)。
+  - 点默认徽标 → `onSetDefault(account, switchFlow)`(点徽标≠点行进入)+ 以该 id 为默认重渲染本页 + toast `已设置默认小号`。
+  - 点 `添加小号`:已满 10 个 → 上限 toast `最多添加10个小号哦`(见 1.6);未满 → `onAddSubaccount(switchFlow)`。
+  - 点 `!` → 轻提示 toast 说明小号含义(文案见清单)。
+  - 点 `⇄` → `logout()`:清理登录态并回 5755 登录窗(=切换 5755 主账号,03 §6)。
+  - 〔备注:旧 m5755 另有骑右上角 `×` → `onPickerClosed(switchFlow)`(登录链路=进入未完成;切换链路=取消保持当前,03 §4.4);本实现按图省略。如需恢复:在 overlay 加 42dp 白圆 `×`(对准面板右上角)接 `onPickerClosed`。〕
 - **业务规则**:每个游戏下最多 **10 个**小号。
 
 ---
