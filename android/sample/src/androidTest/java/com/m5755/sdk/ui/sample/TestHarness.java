@@ -188,4 +188,31 @@ final class TestHarness {
         Context ctx = InstrumentationRegistry.getInstrumentation().getTargetContext();
         return ctx.getSharedPreferences("m5755_operate_min", Context.MODE_PRIVATE).getString(key, null);
     }
+
+    // ===== 屏幕方向(#44 横屏方向适配回归;ADR-0009 只验开屏即定) =====
+
+    /** 设横屏(左旋 90°)。宿主声明 configChanges,Activity 不重建、浮层不销毁。 */
+    void setLandscape() throws Exception {
+        device.setOrientationLeft();
+        device.waitForIdle();
+    }
+
+    /** 复位竖屏(自然方向)并解冻旋转。tearDown 必调,避免遗留横屏影响后续用例。 */
+    void setPortrait() throws Exception {
+        device.setOrientationNatural();
+        device.unfreezeRotation();
+        device.waitForIdle();
+    }
+
+    /** 断言控件可见且完整落在屏内(横屏裁切/溢出守卫):可见尺寸非零且四边不越界。 */
+    void assertOnScreen(String textContains) {
+        UiObject2 o = device.findObject(By.textContains(textContains));
+        assertNotNull("找不到控件: " + textContains, o);
+        android.graphics.Rect b = o.getVisibleBounds();
+        int w = device.getDisplayWidth();
+        int hpx = device.getDisplayHeight();
+        assertTrue("控件不可见(可见尺寸为零,疑被裁): " + textContains + " bounds=" + b, b.height() > 0 && b.width() > 0);
+        assertTrue("控件越出屏幕(横屏裁切/溢出): " + textContains + " bounds=" + b + " screen=" + w + "x" + hpx,
+                b.left >= 0 && b.top >= 0 && b.right <= w && b.bottom <= hpx);
+    }
 }
