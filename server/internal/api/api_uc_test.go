@@ -1,10 +1,13 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
 	"testing"
+
+	"m5755/server/internal/store"
 )
 
 // ucGet 发裸 GET(用户中心面不走 HMAC 验签);可选 platformToken 头。
@@ -88,5 +91,46 @@ func TestUserCenterProfile_CORSPreflight(t *testing.T) {
 	}
 	if res.Header.Get("Access-Control-Allow-Origin") != "http://localhost:8080" {
 		t.Errorf("ACAO 应回显 localhost origin,得到 %q", res.Header.Get("Access-Control-Allow-Origin"))
+	}
+}
+
+// GET /orders:凭 token 返回主账户充值订单,真实货币 CNY、字段映射正确(06a §3)。
+func TestUserCenterOrders_OK(t *testing.T) {
+	srv, st := setup(t)
+	_, paID, token, first := loginNewUser(t, srv)
+
+	if err := st.CreateOrder(context.Background(), store.Order{
+		PlatformOrderID: "UO_uc_test_1", CPOrderID: "cp_uc_1", Account: first, GameID: seedGame,
+		PlatformAccountID: paID, Amount: "648.00", Commodity: "6480 元宝", ServerID: "s1",
+	}); err != nil {
+		t.Fatalf("seed 订单失败: %v", err)
+	}
+
+	res, ar := ucGet(t, srv.URL, "/api/uc/v2/orders", token)
+	if res.StatusCode != 200 || !ar.Success {
+		t.Fatalf("期望 200/success,得到 %d / %+v", res.StatusCode, ar)
+	}
+	orders, _ := ar.Data["orders"].([]interface{})
+	if len(orders) == 0 {
+		t.Fatalf("应返回 seed 的订单: %+v", ar.Data)
+	}
+	o0, _ := orders[0].(map[string]interface{})
+	if o0["orderId"] != "UO_uc_test_1" {
+		t.Errorf("orderId 不符: %+v", o0)
+	}
+	if o0["productName"] != "6480 元宝" {
+		t.Errorf("productName 应=commodity: %+v", o0)
+	}
+	if o0["currency"] != "CNY" {
+		t.Errorf("currency 应=CNY: %+v", o0)
+	}
+}
+
+// 无 token → 401 platform_account_invalid(失效收口,06a §3)。
+func TestUserCenterOrders_NoToken_401(t *testing.T) {
+	srv, _ := setup(t)
+	res, ar := ucGet(t, srv.URL, "/api/uc/v2/orders", "")
+	if res.StatusCode != 401 || ar.Reason != "platform_account_invalid" {
+		t.Fatalf("无 token 应 401/platform_account_invalid,得到 %d / %+v", res.StatusCode, ar)
 	}
 }

@@ -67,3 +67,49 @@ func (svc *Service) GetUserCenterProfile(ctx context.Context, platformToken stri
 	}
 	return data, nil
 }
+
+// UCOrderItem 是用户中心订单列表行(06a §3:真实货币,不出现平台币/代金券)。
+type UCOrderItem struct {
+	OrderID     string `json:"orderId"`
+	ProductName string `json:"productName"`
+	Amount      string `json:"amount"`
+	Currency    string `json:"currency"`
+	CreatedAt   string `json:"createdAt"`
+	Status      string `json:"status"`
+}
+
+// UCOrdersData 是 GET /api/uc/v2/orders 的响应数据(游标分页,06a §3)。
+type UCOrdersData struct {
+	Orders     []UCOrderItem `json:"orders"`
+	NextCursor string        `json:"nextCursor,omitempty"`
+}
+
+// GetUserCenterOrders 凭 platformToken 返回主账户充值订单(游标分页)。金额一律真实货币 CNY。
+func (svc *Service) GetUserCenterOrders(ctx context.Context, platformToken, cursor string) (*UCOrdersData, *Fault) {
+	if platformToken == "" {
+		return nil, fault(401, result.ReasonPlatformAccountInvalid, "缺少登录令牌")
+	}
+	sess, valid, err := svc.store.LookupAccountSessionByToken(ctx, platformToken)
+	if err != nil {
+		return nil, fault(503, result.ReasonPlatformUnavailable, "平台服务暂不可用")
+	}
+	if !valid {
+		return nil, fault(401, result.ReasonPlatformAccountInvalid, "主账户登录态已失效")
+	}
+	rows, next, err := svc.store.ListOrders(ctx, sess.PlatformAccountID, cursor, 20)
+	if err != nil {
+		return nil, fault(503, result.ReasonPlatformUnavailable, "平台服务暂不可用")
+	}
+	data := &UCOrdersData{Orders: []UCOrderItem{}, NextCursor: next}
+	for _, o := range rows {
+		data.Orders = append(data.Orders, UCOrderItem{
+			OrderID:     o.OrderID,
+			ProductName: o.ProductName,
+			Amount:      o.Amount,
+			Currency:    "CNY",
+			CreatedAt:   o.CreatedAt.Format("2006-01-02 15:04"),
+			Status:      o.Status,
+		})
+	}
+	return data, nil
+}

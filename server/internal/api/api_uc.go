@@ -22,6 +22,7 @@ import (
 func registerUCRoutes(r *gin.Engine, svc *domain.Service) {
 	uc := r.Group("/api/uc/v2", ucCORS(ucAllowedOrigins()))
 	uc.GET("/profile", ucProfileHandler(svc))
+	uc.GET("/orders", ucOrdersHandler(svc))
 	// CORS 预检:注册 OPTIONS 路由,组中间件才会对预检生效(ucCORS 内 AbortWithStatus 204)。
 	uc.OPTIONS("/*any", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 }
@@ -78,6 +79,17 @@ func ucCORS(allowed []string) gin.HandlerFunc {
 func ucProfileHandler(svc *domain.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		data, f := svc.GetUserCenterProfile(c.Request.Context(), c.GetHeader(headerPlatformToken))
+		if f != nil {
+			result.WriteFail(c, f.HTTPStatus, f.Reason, f.Message)
+			return
+		}
+		result.WriteOK(c, data)
+	}
+}
+
+func ucOrdersHandler(svc *domain.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		data, f := svc.GetUserCenterOrders(c.Request.Context(), c.GetHeader(headerPlatformToken), c.Query("cursor"))
 		if f != nil {
 			result.WriteFail(c, f.HTTPStatus, f.Reason, f.Message)
 			return
