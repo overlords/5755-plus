@@ -264,12 +264,12 @@ smallText 行距 +2dp;hint 行距 +3dp。粗体使用 `Typeface.DEFAULT` + `Type
   - 下方 1dp `LINE` 分割线。
 - **主体**(底色 `WEAK`,padding 24/12/24/8):
   - **标题行**(高 36dp):左 `选择小号进入游戏` 16sp 粗体 + `!` 信息圆标(18×18dp,白底 LINE 描边圆形,11sp 粗体 `MUTED`,左距 8dp);右 `添加小号` 按钮 **86×32dp**,白底圆角 8dp、文字 13sp:正常态文字与描边 `PRIMARY_DEEP`;**满 10 个**时文字 `#A6A9B0`、描边 `LINE`。
-  - **小号列表**(ScrollView,**weight 撑满主体余高**、透明叠在 `WEAK` 主体上;行高 62dp、首行顶距 12dp、其余 6dp、列表右 padding 16dp;**超过 3 条**时右侧 3dp×70dp `PRIMARY` 圆角滚动条装饰,距顶 12dp、距右 3dp):
-    - **小号行**(smallAccountItem,**还原度以生产 m5755 为准**;设计系统 `SubAccountRow` 卡片尺寸另有一版,以本节生产值为准):外层 `FrameLayout` 可点;内层卡片高 **48dp**、顶距 14dp(给徽标留叠放空间)、白底圆角 **3dp**、`LINE` 1dp 描边、elevation 2。
+  - **小号列表**(ScrollView,**weight 撑满主体余高**、透明叠在 `WEAK` 主体上;行高 62dp、首行顶距 12dp、其余 6dp、列表右 padding 16dp;**超过 3 条**时右侧 3dp 宽 `PRIMARY` 圆角滚动条,**高度按可见/总高比例、随 `scrollY` 实时移动**(非静态装饰;最小 28dp,距右 3dp):
+    - **小号行**(smallAccountItem,**还原度以生产 m5755 为准**;设计系统 `SubAccountRow` 卡片尺寸另有一版,以本节生产值为准):外层 `FrameLayout`(高 72dp)可点;内层卡片高 **58dp**(由 m5755 48dp 上调求长宽比协调)、顶距 14dp(给徽标留叠放空间)、白底圆角 **3dp**、`LINE` 1dp 描边、elevation 2。
       - 名称:label,**14sp 粗体** `TEXT`,左距 16dp、右距 56dp,垂直居中。
       - `当前登录` 标签(仅当前登录小号,当前 Item 模型未带该标志时省略):12sp 粗体 `#5D4300`,底 `#FFF9DF` 圆角 3dp,高 24dp,名称右侧 8dp。
       - 右侧进入箭头:**20dp 圆形** `PRIMARY` 底 + 右箭头矢量图(`m5755_ic_chevron_right_24`,colorFilter `#5D4300`,CENTER,padding 3),距右 8dp,contentDescription `进入`。
-      - **默认徽标**(骑左上角,偏移 左2dp/上8dp):白底圆角 6dp、`LINE` 描边、高 20dp、elevation 4;内含 **14dp 圆形单选**(选中:`PRIMARY` 圆底 + ✓ 10sp `#5D4300`;未选中:白底 `LINE` 描边)+ `默认` 文字 10sp `MUTED`。点徽标设默认(不进入)。
+      - **默认徽标**(骑卡片顶边左上角,偏移 左2dp/上4dp):白底圆角 6dp、`LINE` 描边、高 22dp、elevation 4;内含 **14dp 圆形单选**(选中:`PRIMARY` 圆底 + ✓ 10sp `#5D4300`;未选中:白底 `LINE` 描边)+ `默认` 文字 10sp `MUTED`,**圆选与文字垂直居中对齐**(文字用 WRAP 高度避免顶对齐)。点徽标设默认(不进入)。
 - **文案清单**:`选择小号进入游戏`、`添加小号`、`当前登录`(标签,Item 暂未带标志时不渲染)、`默认`、`已设置默认小号`(toast)、`最多添加10个小号哦`(上限 toast)、`游戏小号是你在本游戏内的角色账号,由平台分配;点「默认」可设为下次自动登录的小号。`(`!` 信息 toast)、contentDescription:`关闭小号选择页`/`切换5755账户`/`进入`。
 - **交互与回调**(回调走 `ColdStartController`,均带 `switchFlow`):
   - 点小号行 → `onSubaccountChosen(account, switchFlow)` → 进入登录态校验弹窗(valid=true)。

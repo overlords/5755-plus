@@ -426,16 +426,46 @@ public final class SdkUi implements FlowUi {
         scroll.addView(rows);
         listFrame.addView(scroll, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         if (list.items.size() > 3) {
-            View thumb = new View(host);
+            // 金色滚动条:高度按可见/总高比例、translationY 跟随 scrollY 实时移动(非静态装饰)
+            final View thumb = new View(host);
             thumb.setBackground(UiKit.rounded(UiKit.PRIMARY, UiKit.dp(host, 999)));
-            FrameLayout.LayoutParams thumbLp = new FrameLayout.LayoutParams(UiKit.dp(host, 3), UiKit.dp(host, 70), Gravity.END | Gravity.TOP);
-            thumbLp.topMargin = UiKit.dp(host, 12);
+            final FrameLayout.LayoutParams thumbLp = new FrameLayout.LayoutParams(UiKit.dp(host, 3), UiKit.dp(host, 40), Gravity.END | Gravity.TOP);
             thumbLp.rightMargin = UiKit.dp(host, 3);
+            thumb.setVisibility(View.GONE);
             listFrame.addView(thumb, thumbLp);
+            final android.widget.ScrollView fscroll = scroll;
+            final LinearLayout frows = rows;
+            final int minThumb = UiKit.dp(host, 28);
+            final Runnable upd = new Runnable() {
+                public void run() {
+                    int totalH = frows.getHeight() + fscroll.getPaddingTop() + fscroll.getPaddingBottom();
+                    int trackH = fscroll.getHeight();
+                    if (totalH <= trackH || trackH <= 0) {
+                        thumb.setVisibility(View.GONE);
+                        return;
+                    }
+                    thumb.setVisibility(View.VISIBLE);
+                    int th = Math.max(minThumb, (int) ((long) trackH * trackH / totalH));
+                    if (thumbLp.height != th) {
+                        thumbLp.height = th;
+                        thumb.setLayoutParams(thumbLp);
+                    }
+                    int maxScroll = totalH - trackH;
+                    int maxY = trackH - th;
+                    float ty = Math.max(0, Math.min(maxY, (float) fscroll.getScrollY() / maxScroll * maxY));
+                    thumb.setTranslationY(ty);
+                }
+            };
+            scroll.getViewTreeObserver().addOnScrollChangedListener(new android.view.ViewTreeObserver.OnScrollChangedListener() {
+                public void onScrollChanged() {
+                    upd.run();
+                }
+            });
+            scroll.post(upd);
         }
         body.addView(listFrame, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1));
-        // 小号行:忠实搬旧 m5755 smallAccountItem(还原度口径)——48dp 白卡/3dp 圆角/LINE 细边/elevation 2;
-        // 名 14sp 粗;右侧 20dp 金圆 + chevron 矢量图(tint #5D4300);左上角「默认」徽标(圆选 + 标签)。
+        // 小号行(还原 m5755 smallAccountItem,卡片高调至 58dp 求长宽比协调)——白卡/3dp 圆角/LINE 细边/elevation 2;
+        // 名 14sp 粗;右侧 20dp 金圆 + chevron 矢量图(tint #5D4300);左上角「默认」徽标(圆选 + 标签,骑卡片顶边)。
         int rowIdx = 0;
         for (final Results.SubaccountList.Item it : list.items) {
             FrameLayout wrap = new FrameLayout(host);
@@ -444,7 +474,7 @@ public final class SdkUi implements FlowUi {
             FrameLayout item = new FrameLayout(host);
             item.setBackground(UiKit.roundedStroke(UiKit.WHITE, UiKit.dp(host, 3), UiKit.LINE, UiKit.dp(host, 1)));
             item.setElevation(UiKit.dp(host, 2));
-            FrameLayout.LayoutParams itemLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 48), Gravity.TOP);
+            FrameLayout.LayoutParams itemLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 58), Gravity.TOP);
             itemLp.topMargin = UiKit.dp(host, 14);
             wrap.addView(item, itemLp);
 
@@ -471,7 +501,7 @@ public final class SdkUi implements FlowUi {
             enLp.rightMargin = UiKit.dp(host, 8);
             item.addView(enter, enLp);
 
-            // 「默认」徽标:6dp 药丸 + 14dp 圆选 + 标签,骑左上角(左2/上8)
+            // 「默认」徽标:6dp 药丸 + 14dp 圆选 + 标签(圆选与文字垂直居中对齐),骑卡片顶边左上角(左2/上4)
             final LinearLayout badge = new LinearLayout(host);
             badge.setOrientation(LinearLayout.HORIZONTAL);
             badge.setGravity(Gravity.CENTER_VERTICAL);
@@ -496,10 +526,11 @@ public final class SdkUi implements FlowUi {
             dtext.setTextSize(10);
             dtext.setTextColor(UiKit.MUTED);
             dtext.setIncludeFontPadding(false);
-            badge.addView(dtext, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, UiKit.dp(host, 20)));
-            FrameLayout.LayoutParams badgeLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, UiKit.dp(host, 20), Gravity.START | Gravity.TOP);
+            dtext.setGravity(Gravity.CENTER_VERTICAL);
+            badge.addView(dtext, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            FrameLayout.LayoutParams badgeLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, UiKit.dp(host, 22), Gravity.START | Gravity.TOP);
             badgeLp.leftMargin = UiKit.dp(host, 2);
-            badgeLp.topMargin = UiKit.dp(host, 8);
+            badgeLp.topMargin = UiKit.dp(host, 4);
             wrap.addView(badge, badgeLp);
 
             wrap.setOnClickListener(new View.OnClickListener() {
@@ -521,7 +552,7 @@ public final class SdkUi implements FlowUi {
                     });
                 }
             });
-            LinearLayout.LayoutParams wrapLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 62));
+            LinearLayout.LayoutParams wrapLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 72));
             wrapLp.topMargin = UiKit.dp(host, rowIdx == 0 ? 12 : 6);
             rowIdx++;
             rows.addView(wrap, wrapLp);
