@@ -142,6 +142,14 @@ final class TestHarness {
         assertTrue("应进入游戏(登录成功)", hasText("登录成功 account=", WAIT));
     }
 
+    /** 进游戏内后点悬浮球「账」打开用户中心,返回其 WebView 容器(方向形态判定,不依赖内容)。 */
+    UiObject2 openUserCenter() {
+        tapExact("账");
+        UiObject2 web = device.wait(Until.findObject(By.clazz("android.webkit.WebView")), WAIT);
+        assertNotNull("用户中心应打开(WebView 容器)", web);
+        return web;
+    }
+
     /** 控件水平中心是否在右半屏(横屏右侧抽屉判定)。 */
     boolean centerInRightHalf(String text) {
         UiObject2 o = device.findObject(By.text(text));
