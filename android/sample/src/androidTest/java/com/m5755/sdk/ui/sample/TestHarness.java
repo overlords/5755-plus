@@ -109,6 +109,18 @@ final class TestHarness {
         return phone;
     }
 
+    /** 新用户:登录窗 → devCode 登录 → 实名(setText 注入中文,绕开 adb 中文输入限制)→ 小号选择页。 */
+    void toSubaccountPicker(String phone) throws Exception {
+        toLoginWindow();
+        doSmsLogin(phone);
+        UiObject2 name = waitText("请输入真实姓名");
+        assertNotNull("新用户应到实名页", name);
+        name.setText("测试玩家");
+        waitText("请输入身份证号").setText("11010119900101001X");
+        tapExact("提交");
+        assertTrue("实名通过应进小号选择页", hasText("选择小号进入游戏", WAIT));
+    }
+
     // ===== dev 控制面(签名直调) =====
 
     void devControl(String path, JSONObject body) throws Exception {
