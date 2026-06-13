@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // ---------- 用户中心面(/api/uc/v2,ADR-0010) ----------
@@ -122,4 +123,37 @@ func (s *Store) ListOrders(ctx context.Context, platformAccountID, cursor string
 		out = out[:limit]
 	}
 	return out, next, nil
+}
+
+// UpdateLoginAccount 把主账户绑定手机改为 newPhone(换绑)。
+// 返回 (ok, err):ok=false 表示该手机号已被占用(login_account 唯一约束 23505)。
+func (s *Store) UpdateLoginAccount(ctx context.Context, platformAccountID, newPhone string) (bool, error) {
+	_, err := s.pool.Exec(ctx, `UPDATE platform_accounts SET login_account=$1 WHERE platform_account_id=$2`,
+		newPhone, platformAccountID)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" { // unique_violation
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// UpdatePasswordHash 改主账户密码哈希(改密)。
+func (s *Store) UpdatePasswordHash(ctx context.Context, platformAccountID, passwordHash string) error {
+	_, err := s.pool.Exec(ctx, `UPDATE platform_accounts SET password_hash=$1 WHERE platform_account_id=$2`,
+		passwordHash, platformAccountID)
+	return err
+}
+
+// RevokeAllAccountSessions 吊销主账户**跨全部游戏**的会话(改密强制处处重登)。
+func (s *Store) RevokeAllAccountSessions(ctx context.Context, platformAccountID string) error {
+	if _, err := s.pool.Exec(ctx, `UPDATE account_sessions SET revoked=true
+		WHERE platform_account_id=$1 AND NOT revoked`, platformAccountID); err != nil {
+		return err
+	}
+	_, err := s.pool.Exec(ctx, `UPDATE subaccount_sessions SET revoked=true
+		WHERE platform_account_id=$1 AND NOT revoked`, platformAccountID)
+	return err
 }

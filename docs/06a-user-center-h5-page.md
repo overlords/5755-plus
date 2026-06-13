@@ -31,9 +31,9 @@
 - 抽屉右上角 `×`(SDK 容器提供,06 §11.2)**语义恒定 = 整体关闭用户中心**,与 SPA 内部层级无关;SDK 不向 H5 下发返回事件,H5 自管路由。
 - 二级页**不再叠 sheet/弹层**;表单内联在二级页内。
 
-## 3. 数据 API 面 `/api/uc/v2/*`(指示性,详契约随实现补全)
+## 3. 数据 API 面 `/api/uc/v2/*`
 
-鉴权:`X-M5755-Platform-Token: <platformToken>`(Bearer 语义,复用 04 头);会话绑 `gameId` 三元组;`reason` 沿用 04 枚举。
+鉴权:`X-M5755-Platform-Token: <platformToken>`(Bearer 语义,复用 04 头);会话绑 `gameId` 三元组;`reason` 沿用 04 枚举。下表六端点已在服务端 `internal/api`(`api_uc.go`)实现,ADR-0010 面、不走 HMAC。
 
 | 端点 | 方法 | 用途 | 关键返回/入参 |
 | --- | --- | --- | --- |
@@ -46,7 +46,7 @@
 
 - **失效收口**:任一端点返回 `reason=platform_account_invalid` 或 401 → SPA 调 `postAccountAction("session_invalid")`,SDK 清理登录态回 5755 登录窗(06 §4),不在页内提示重试。
 - **改密成功 → 强制重登**:改密使当前 `platformToken` 作废,SPA 提交成功后即调 `postAccountAction("session_invalid")`。
-- **换绑手机成功不登出**:回主页刷新脱敏手机 + 成功 toast。
+- **换绑手机成功不登出**:回主页刷新脱敏手机 + 成功 toast。新手机号已被占用 → `409` + `reason=param_invalid`(SPA 内联提示「该手机号已被占用」,不触发失效收口)。
 - 金额一律真实货币 `currency=CNY`,前端渲染 `¥`;**订单字段不得出现平台币/代金券/优惠券等范围外业务**(07 §0.2)。
 
 ## 4. 主页布局

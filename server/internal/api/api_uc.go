@@ -23,6 +23,10 @@ func registerUCRoutes(r *gin.Engine, svc *domain.Service) {
 	uc := r.Group("/api/uc/v2", ucCORS(ucAllowedOrigins()))
 	uc.GET("/profile", ucProfileHandler(svc))
 	uc.GET("/orders", ucOrdersHandler(svc))
+	uc.POST("/phone/sms-codes", ucPhoneSmsHandler(svc))
+	uc.PUT("/phone", ucRebindPhoneHandler(svc))
+	uc.POST("/password/sms-codes", ucPasswordSmsHandler(svc))
+	uc.PUT("/password", ucChangePasswordHandler(svc))
 	// CORS 预检:注册 OPTIONS 路由,组中间件才会对预检生效(ucCORS 内 AbortWithStatus 204)。
 	uc.OPTIONS("/*any", func(c *gin.Context) { c.Status(http.StatusNoContent) })
 }
@@ -90,10 +94,60 @@ func ucProfileHandler(svc *domain.Service) gin.HandlerFunc {
 func ucOrdersHandler(svc *domain.Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		data, f := svc.GetUserCenterOrders(c.Request.Context(), c.GetHeader(headerPlatformToken), c.Query("cursor"))
-		if f != nil {
-			result.WriteFail(c, f.HTTPStatus, f.Reason, f.Message)
-			return
+		writeUC(c, data, f)
+	}
+}
+
+func writeUC(c *gin.Context, data interface{}, f *domain.Fault) {
+	if f != nil {
+		result.WriteFail(c, f.HTTPStatus, f.Reason, f.Message)
+		return
+	}
+	result.WriteOK(c, data)
+}
+
+// 换绑手机:向新手机号发验证码。
+func ucPhoneSmsHandler(svc *domain.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var body struct {
+			NewPhone string `json:"newPhone"`
 		}
-		result.WriteOK(c, data)
+		_ = c.ShouldBindJSON(&body)
+		data, f := svc.UCSendPhoneSms(c.Request.Context(), c.GetHeader(headerPlatformToken), body.NewPhone)
+		writeUC(c, data, f)
+	}
+}
+
+// 换绑手机:提交(成功不登出)。
+func ucRebindPhoneHandler(svc *domain.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var body struct {
+			NewPhone string `json:"newPhone"`
+			SmsCode  string `json:"smsCode"`
+		}
+		_ = c.ShouldBindJSON(&body)
+		f := svc.UCRebindPhone(c.Request.Context(), c.GetHeader(headerPlatformToken), body.NewPhone, body.SmsCode)
+		writeUC(c, gin.H{"ok": true}, f)
+	}
+}
+
+// 改密:向已绑手机发验证码(无 body)。
+func ucPasswordSmsHandler(svc *domain.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		data, f := svc.UCSendPasswordSms(c.Request.Context(), c.GetHeader(headerPlatformToken))
+		writeUC(c, data, f)
+	}
+}
+
+// 改密:提交(成功作废全部会话 → SPA session_invalid 重登)。
+func ucChangePasswordHandler(svc *domain.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var body struct {
+			SmsCode     string `json:"smsCode"`
+			NewPassword string `json:"newPassword"`
+		}
+		_ = c.ShouldBindJSON(&body)
+		f := svc.UCChangePassword(c.Request.Context(), c.GetHeader(headerPlatformToken), body.SmsCode, body.NewPassword)
+		writeUC(c, gin.H{"ok": true}, f)
 	}
 }

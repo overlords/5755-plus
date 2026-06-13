@@ -1,8 +1,11 @@
 /* 用户中心 H5 — 数据层 + bridge 封装
  * 规格:docs/06a-user-center-h5-page.md §3/§6/§7;鉴权 ADR-0010。
  *
- * 数据面 /api/uc/v2/* 尚未实现(见 06a),故默认走 USE_MOCK。
- * 真接口就位后把 USE_MOCK 置 false 即可,fetch 路径已按 06a §3 写好。
+ * 数据面 /api/uc/v2/* 六端点服务端已实现(internal/api/api_uc.go),real 已逐一对齐。
+ * 仍默认 USE_MOCK=true;翻 false 前还需两件部署侧事:
+ *   1) 网络路径:BASE 相对路径会打到 SPA 自身域(uc.*),需 nginx 反代 /api/uc/v2 →
+ *      平台服务端,或把 BASE 改绝对域(CORS 已默认放行 uc.xingninghuyu.com);
+ *   2) 把含这批端点的服务端部署到 dev(CTID 105)。
  */
 
 // ---- platformToken 捕获(纯函数,06a §7;可测)----
