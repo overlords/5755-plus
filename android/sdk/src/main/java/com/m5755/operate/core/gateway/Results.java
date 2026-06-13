@@ -23,6 +23,7 @@ public final class Results {
         public boolean updateRequired;
         public String configVersion;
         public String requestId;
+        public String userCenterUrl; // #5:平台用户中心 H5 URL(经 /config 下发)
     }
 
     /** 短信验证码请求结果。 */

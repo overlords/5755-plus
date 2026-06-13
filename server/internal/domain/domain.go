@@ -104,6 +104,7 @@ type ConfigData struct {
 	UpdateRequired              bool        `json:"updateRequired"`
 	LoginDomain                 string      `json:"loginDomain"`
 	PaymentDomain               string      `json:"paymentDomain"`
+	UserCenterURL               string      `json:"userCenterUrl,omitempty"`
 }
 
 // GetConfig 返回初始化配置;gameId 缺失或游戏不存在为阻断型失败。
@@ -132,6 +133,7 @@ func (svc *Service) GetConfig(ctx context.Context, gameID, sdkVersion, requestID
 		UpdateRequired:              compareVersion(sdkVersion, g.SDKMinVersion) < 0,
 		LoginDomain:                 g.LoginDomain,
 		PaymentDomain:               g.PaymentDomain,
+		UserCenterURL:               g.UserCenterURL,
 	}, nil
 }
 

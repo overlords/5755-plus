@@ -60,6 +60,7 @@ public final class HttpPlatformGateway implements PlatformGateway {
                 out.updateRequired = r.data.optBoolean("updateRequired", false);
                 out.configVersion = r.data.optString("configVersion", "");
                 out.requestId = r.data.optString("requestId", "");
+                out.userCenterUrl = r.data.optString("userCenterUrl", "");
             }
         } catch (Exception e) {
             out.ok = false;

@@ -368,7 +368,8 @@ public final class ColdStartController {
             listener.onLogout(); // 切换小号收敛到账号变化(03 §5)
         }
         ui.showSessionCheck(r.account, maskToken(r.token));
-        ui.showFloatBall(r.account); // 游戏进入后悬浮球(#26)
+        // #5:用户中心 = 平台 H5,URL 经 /config 下发,带 platformToken
+        ui.showFloatBall(r.account, config != null ? config.userCenterUrl : "", storage.getPlatformToken());
         flow.onFlowSuccess(r.account, r.token);
     }
 

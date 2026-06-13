@@ -695,7 +695,7 @@ public class ColdStartControllerTest {
             lastPayDisplay = orderDisplay;
         }
 
-        public void showFloatBall(String account) {
+        public void showFloatBall(String account, String userCenterUrl, String platformToken) {
             calls.add("showFloatBall:" + account);
         }
 

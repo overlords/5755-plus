@@ -109,6 +109,7 @@ type GameConfig struct {
 	SDKMinVersion               string
 	LoginDomain                 string
 	PaymentDomain               string
+	UserCenterURL               string
 }
 
 // GetGameConfig 读游戏配置,并叠加 dev 控制面维护注入(若有)。游戏不存在返回 ErrNotFound。
@@ -116,11 +117,11 @@ func (s *Store) GetGameConfig(ctx context.Context, gameID string) (*GameConfig, 
 	var g GameConfig
 	err := s.pool.QueryRow(ctx, `SELECT game_id, game_name, maintenance_enabled, maintenance_message,
 		anti_addiction_entry_blocked, anti_addiction_payment_blocked, protocol_version, config_version,
-		sdk_latest_version, sdk_min_version, login_domain, payment_domain
+		sdk_latest_version, sdk_min_version, login_domain, payment_domain, user_center_url
 		FROM games WHERE game_id=$1`, gameID).Scan(
 		&g.GameID, &g.GameName, &g.MaintenanceEnabled, &g.MaintenanceMessage,
 		&g.AntiAddictionEntryBlocked, &g.AntiAddictionPaymentBlocked, &g.ProtocolVersion, &g.ConfigVersion,
-		&g.SDKLatestVersion, &g.SDKMinVersion, &g.LoginDomain, &g.PaymentDomain)
+		&g.SDKLatestVersion, &g.SDKMinVersion, &g.LoginDomain, &g.PaymentDomain, &g.UserCenterURL)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}

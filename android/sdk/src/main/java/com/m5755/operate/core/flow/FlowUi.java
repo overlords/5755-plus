@@ -69,8 +69,9 @@ public interface FlowUi {
     /** 支付容器(07 §9):订单显示取自入参,paymentUrl 由 WebView 承载。 */
     void showPayDrawer(java.util.Map<String, String> orderDisplay, String paymentUrl);
 
-    /** 游戏进入后展示悬浮球(唯一入口=用户中心,07 §11)。 */
-    void showFloatBall(String account);
+    /** 游戏进入后展示悬浮球(唯一入口=用户中心,07 §11)。用户中心 = 平台 H5(#5):
+     * userCenterUrl 经 /config 下发,加载时带 platformToken 供平台页拉取主账户。 */
+    void showFloatBall(String account, String userCenterUrl, String platformToken);
 
     /** 释放悬浮球与所有层(destroy)。 */
     void hideFloatBall();

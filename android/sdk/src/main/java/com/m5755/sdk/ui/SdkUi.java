@@ -369,33 +369,57 @@ public final class SdkUi implements FlowUi {
         LinearLayout rows = new LinearLayout(host);
         rows.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(rows);
+        // 设计系统 SubAccountRow:独立白卡(≥70dp,14dp 圆角,细边,软阴影)+ 左上角「默认」tab + 右侧金色进入箭头
         for (final Results.SubaccountList.Item it : list.items) {
-            LinearLayout row = new LinearLayout(host);
-            row.setOrientation(LinearLayout.HORIZONTAL);
-            row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setBackground(UiKit.rounded(UiKit.WHITE, UiKit.dp(host, 8)));
-            row.setPadding(UiKit.dp(host, 14), 0, UiKit.dp(host, 10), 0);
+            FrameLayout wrap = new FrameLayout(host);
+
+            LinearLayout cardRow = new LinearLayout(host);
+            cardRow.setOrientation(LinearLayout.HORIZONTAL);
+            cardRow.setGravity(Gravity.CENTER_VERTICAL);
+            cardRow.setBackground(UiKit.roundedStroke(UiKit.WHITE, UiKit.dp(host, 14), 0xFFEAECEF, UiKit.dp(host, 1)));
+            cardRow.setElevation(UiKit.dp(host, 2));
+            cardRow.setPadding(UiKit.dp(host, 16), UiKit.dp(host, 14), UiKit.dp(host, 12), UiKit.dp(host, 14));
+            FrameLayout.LayoutParams crLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 70));
+            crLp.topMargin = UiKit.dp(host, 9); // 留出顶部 tab 骑边空间
+
             TextView nameTv = new TextView(host);
             nameTv.setText(it.displayName);
-            nameTv.setTextSize(14);
+            nameTv.setTextSize(16);
             nameTv.setTextColor(UiKit.TEXT);
             nameTv.getPaint().setFakeBoldText(true);
-            row.addView(nameTv, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
-            final TextView badge = new TextView(host);
-            badge.setText(it.isDefault ? "✓ 默认" : "默认");
-            badge.setTextSize(12);
-            badge.setGravity(Gravity.CENTER);
-            badge.setPadding(UiKit.dp(host, 10), UiKit.dp(host, 4), UiKit.dp(host, 10), UiKit.dp(host, 4));
+            cardRow.addView(nameTv, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+
+            TextView arrow = new TextView(host); // 金色圆形进入箭头
+            arrow.setText("›");
+            arrow.setTextSize(20);
+            arrow.setTextColor(UiKit.PRIMARY_DEEP);
+            arrow.setGravity(Gravity.CENTER);
+            arrow.setBackground(UiKit.rounded(UiKit.PRIMARY, UiKit.dp(host, 999)));
+            LinearLayout.LayoutParams arLp = new LinearLayout.LayoutParams(UiKit.dp(host, 32), UiKit.dp(host, 32));
+            cardRow.addView(arrow, arLp);
+
+            wrap.addView(cardRow, crLp);
+
+            final TextView tab = new TextView(host); // 「默认」骑在卡片左上角
+            tab.setText(it.isDefault ? "✓ 默认" : "默认");
+            tab.setTextSize(11);
+            tab.setGravity(Gravity.CENTER);
+            tab.setPadding(UiKit.dp(host, 10), UiKit.dp(host, 3), UiKit.dp(host, 10), UiKit.dp(host, 3));
             if (it.isDefault) {
-                badge.setTextColor(UiKit.BTN_TEXT_ON_PRIMARY);
-                badge.setBackground(UiKit.rounded(UiKit.PRIMARY, UiKit.dp(host, 999)));
+                tab.setTextColor(UiKit.PRIMARY_DEEP);
+                tab.setBackground(UiKit.rounded(UiKit.PRIMARY, UiKit.dp(host, 999)));
             } else {
-                badge.setTextColor(UiKit.MUTED);
-                badge.setBackground(UiKit.roundedStroke(UiKit.WHITE, UiKit.dp(host, 999), 0xFFD5D7DD, UiKit.dp(host, 1)));
+                tab.setTextColor(UiKit.MUTED);
+                tab.setBackground(UiKit.roundedStroke(UiKit.WHITE, UiKit.dp(host, 999), 0xFFD5D7DD, UiKit.dp(host, 1)));
             }
-            row.addView(badge);
-            row.setClickable(true);
-            row.setOnClickListener(new View.OnClickListener() {
+            tab.setElevation(UiKit.dp(host, 3));
+            FrameLayout.LayoutParams tabLp = new FrameLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            tabLp.leftMargin = UiKit.dp(host, 14);
+            wrap.addView(tab, tabLp);
+
+            cardRow.setClickable(true);
+            cardRow.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
                     background.execute(new Runnable() {
                         public void run() {
@@ -404,25 +428,25 @@ public final class SdkUi implements FlowUi {
                     });
                 }
             });
-            badge.setOnClickListener(new View.OnClickListener() {
+            tab.setOnClickListener(new View.OnClickListener() {
                 public void onClick(View v) {
                     background.execute(new Runnable() {
                         public void run() {
-                            controller.onSetDefault(it.account, switchFlow); // 点默认标签≠点行进入
+                            controller.onSetDefault(it.account, switchFlow); // 点默认 tab≠点卡进入
                         }
                     });
                 }
             });
-            LinearLayout.LayoutParams rowLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 52));
-            rowLp.topMargin = UiKit.dp(host, 8);
-            rows.addView(row, rowLp);
+            LinearLayout.LayoutParams wrapLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 81));
+            wrapLp.topMargin = UiKit.dp(host, 8);
+            rows.addView(wrap, wrapLp);
         }
         LinearLayout.LayoutParams scLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        scroll.setBackground(UiKit.rounded(UiKit.WEAK, UiKit.dp(host, 10)));
-        scroll.setPadding(UiKit.dp(host, 6), UiKit.dp(host, 2), UiKit.dp(host, 6), UiKit.dp(host, 8));
-        scLp.topMargin = UiKit.dp(host, 10);
-        int maxH = UiKit.dp(host, 300);
-        scLp.height = Math.min(maxH, UiKit.dp(host, 60) * Math.max(1, list.items.size()));
+        scroll.setClipToPadding(false); // 卡片阴影不被裁
+        scroll.setPadding(UiKit.dp(host, 2), UiKit.dp(host, 2), UiKit.dp(host, 2), UiKit.dp(host, 4));
+        scLp.topMargin = UiKit.dp(host, 8);
+        int maxH = UiKit.dp(host, 320);
+        scLp.height = Math.min(maxH, UiKit.dp(host, 89) * Math.max(1, list.items.size()));
         card.addView(scroll, scLp);
 
         TextView tip = new TextView(host);
@@ -542,10 +566,16 @@ public final class SdkUi implements FlowUi {
         });
     }
 
+    // #5:用户中心 = 平台 H5;URL 经 /config 下发,加载时带 platformToken。
+    private String userCenterUrl = "";
+    private String platformToken = "";
+
     @Override
-    public void showFloatBall(final String account) {
+    public void showFloatBall(final String account, final String ucUrl, final String token) {
         main.post(new Runnable() {
             public void run() {
+                userCenterUrl = ucUrl == null ? "" : ucUrl;
+                platformToken = token == null ? "" : token;
                 mountFloatBall(account);
             }
         });
@@ -780,16 +810,31 @@ public final class SdkUi implements FlowUi {
         overlay.setBackgroundColor(UiKit.MASK);
         overlay.setClickable(true);
 
-        android.webkit.WebView web = new android.webkit.WebView(host);
+        final android.webkit.WebView web = new android.webkit.WebView(host);
         android.webkit.WebSettings ws = web.getSettings();
         ws.setJavaScriptEnabled(true);
         ws.setJavaScriptCanOpenWindowsAutomatically(false);
         ws.setAllowFileAccess(false);
         ws.setAllowFileAccessFromFileURLs(false);
         ws.setAllowUniversalAccessFromFileURLs(false);
-        web.addJavascriptInterface(new UserCenterBridge(account), "UserCenter");
-        // baseURL=null(不伪造域名,06 §5.1)
-        web.loadDataWithBaseURL(null, userCenterHtml(account), "text/html", "utf-8", null);
+        ws.setUserAgentString(ws.getUserAgentString() + " M5755Sdk/" + SDK_VERSION_UA); // UA 带 SDK 版本号
+        web.addJavascriptInterface(new UserCenterBridge(), "UserCenter");
+        web.setWebViewClient(new android.webkit.WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(android.webkit.WebView v, String u) {
+                if (u != null && (u.startsWith("http://") || u.startsWith("https://"))) {
+                    v.loadUrl(u); // 站内加载,不外跳系统浏览器
+                }
+                return true;
+            }
+        });
+        if (userCenterUrl != null && !userCenterUrl.isEmpty()) {
+            // #5:平台用户中心 H5,带 platformToken 供平台页拉取主账户
+            String sep = userCenterUrl.contains("?") ? "&" : "?";
+            web.loadUrl(userCenterUrl + sep + "token=" + android.net.Uri.encode(platformToken));
+        } else {
+            web.loadDataWithBaseURL(null, userCenterFallbackHtml(), "text/html", "utf-8", null); // 未配置 URL 的最小回退
+        }
 
         int dm = host.getResources().getDisplayMetrics().widthPixels;
         boolean portrait = host.getResources().getConfiguration().orientation
@@ -805,18 +850,8 @@ public final class SdkUi implements FlowUi {
         root.addView(overlay, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
     }
 
-    /** JS Bridge 最小契约(06 §3):仅两方法。 */
+    /** JS Bridge 最小契约(06 §3,#5):仅 postAccountAction;不再下发账户上下文。 */
     private final class UserCenterBridge {
-        private final String account;
-
-        UserCenterBridge(String account) {
-            this.account = account;
-        }
-
-        @android.webkit.JavascriptInterface
-        public String getAccountContext() {
-            return "{\"accountId\":\"" + account + "\"}";
-        }
 
         @android.webkit.JavascriptInterface
         public void postAccountAction(String action) {
@@ -837,20 +872,19 @@ public final class SdkUi implements FlowUi {
         }
     }
 
-    private String userCenterHtml(String account) {
+    /** 未配置 userCenterUrl 时的最小回退(不展示游戏小号;仅切换小号/退出登录)。 */
+    private String userCenterFallbackHtml() {
         return "<!doctype html><html><head><meta charset='utf-8'>"
                 + "<meta name='viewport' content='width=device-width,initial-scale=1'>"
                 + "<style>body{margin:0;font-family:sans-serif;background:#f5f6f8;color:#25272b}"
-                + ".hero{background:#ffc936;padding:28px 24px;color:#5d4300}.hero .id{font-size:22px;font-weight:700}"
                 + ".card{background:#fff;margin:16px;border-radius:8px;overflow:hidden}"
                 + ".row{padding:16px;border-bottom:1px solid #f0f1f4;font-size:16px}.row:active{background:#f7f7f7}"
                 + ".tip{color:#9aa0a8;font-size:13px;margin:16px;line-height:1.6}</style></head><body>"
-                + "<div class='hero'><div>当前游戏小号 ID</div><div class='id'>" + account + "</div></div>"
                 + "<div class='card'>"
                 + "<div class='row' onclick=\"UserCenter.postAccountAction('switch_account')\">切换小号</div>"
                 + "<div class='row' onclick=\"UserCenter.postAccountAction('logout')\">退出登录</div>"
                 + "</div>"
-                + "<div class='tip'>当前为最小化用户中心容器,仅提供小号上下文、切换小号与退出登录。</div>"
+                + "<div class='tip'>用户中心由平台 H5 提供(未配置 URL,当前为最小回退)。</div>"
                 + "</body></html>";
     }
 
@@ -861,15 +895,109 @@ public final class SdkUi implements FlowUi {
         return g;
     }
 
+    // ===== 站内网页层(协议页/通用 H5,#1)=====
+
+    private static final String SDK_VERSION_UA = "2.0.0";
+    private static final String PROTOCOL_BASE = "https://p.xingninghuyu.com/agreement/";
+
+    /** 协议名加可点链接 → 站内网页层。 */
+    private void linkProtocol(android.text.SpannableString sp, String full, final String label, final String path) {
+        int i = full.indexOf(label);
+        if (i < 0) {
+            return;
+        }
+        sp.setSpan(new android.text.style.ClickableSpan() {
+            @Override
+            public void onClick(View widget) {
+                openWebOverlay(PROTOCOL_BASE + path, label.replaceAll("[《》]", ""));
+            }
+
+            @Override
+            public void updateDrawState(android.text.TextPaint ds) {
+                ds.setColor(UiKit.PRIMARY_DEEP);
+                ds.setUnderlineText(false);
+            }
+        }, i, i + label.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+    }
+
+    /**
+     * 站内 WebView 网页层(协议页等):标题栏 + 关闭按钮;链接站内加载、不跳外部浏览器;
+     * UserAgent 追加 {@code M5755Sdk/<版本>} 供后端/H5 识别。直接叠在当前层之上(不占用 overlay 槽)。
+     */
+    @SuppressWarnings("SetJavaScriptEnabled")
+    private void openWebOverlay(String url, String title) {
+        final ViewGroup root = (ViewGroup) host.findViewById(android.R.id.content);
+        LinearLayout panel = new LinearLayout(host);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackgroundColor(0xFFFFFFFF);
+        panel.setClickable(true);
+
+        LinearLayout bar = new LinearLayout(host);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setBackgroundColor(0xFFF5F6F8);
+        bar.setPadding(UiKit.dp(host, 16), UiKit.dp(host, 12), UiKit.dp(host, 12), UiKit.dp(host, 12));
+        TextView t = new TextView(host);
+        t.setText(title);
+        t.setTextSize(16);
+        t.setTextColor(0xFF111111);
+        TextView close = new TextView(host);
+        close.setText("✕");
+        close.setTextSize(18);
+        close.setTextColor(0xFF747880);
+        close.setPadding(UiKit.dp(host, 8), 0, UiKit.dp(host, 8), 0);
+        close.setClickable(true);
+        bar.addView(t, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        bar.addView(close);
+        panel.addView(bar, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        final android.webkit.WebView web = new android.webkit.WebView(host);
+        android.webkit.WebSettings ws = web.getSettings();
+        ws.setJavaScriptEnabled(true);
+        ws.setAllowFileAccess(false);
+        ws.setAllowFileAccessFromFileURLs(false);
+        ws.setAllowUniversalAccessFromFileURLs(false);
+        ws.setUserAgentString(ws.getUserAgentString() + " M5755Sdk/" + SDK_VERSION_UA);
+        web.setWebViewClient(new android.webkit.WebViewClient() {
+            @Override
+            public boolean shouldOverrideUrlLoading(android.webkit.WebView v, String u) {
+                if (u != null && (u.startsWith("http://") || u.startsWith("https://"))) {
+                    v.loadUrl(u); // 站内加载,不外跳系统浏览器
+                }
+                return true; // 其它 scheme(tel/intent 等)一律拦掉
+            }
+        });
+        web.loadUrl(url);
+        panel.addView(web, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+
+        final LinearLayout layer = panel;
+        root.addView(layer, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+        close.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                web.loadUrl("about:blank");
+                root.removeView(layer);
+                web.destroy();
+            }
+        });
+    }
+
     // ===== 模态构建 =====
 
     private void mountProtocol() {
         LinearLayout card = UiKit.modalCard(host, 520);
         card.addView(UiKit.title(host, "个人信息保护引导"));
-        TextView body = UiKit.hint(host,
-                "本游戏接入 5755 SDK。为提供游戏资源加载、联网、账号安全、实名防沉迷、支付、用户中心和诊断能力,"
-                        + "SDK 需要处理必要的设备信息、网络信息、当前游戏小号信息和日志信息。\n\n"
-                        + "请阅读《用户注册协议》《用户隐私协议》《儿童隐私保护指引》《第三方信息共享清单》。同意后进入账号登录。");
+        String bodyText = "本游戏接入 5755 SDK。为提供游戏资源加载、联网、账号安全、实名防沉迷、支付、用户中心和诊断能力,"
+                + "SDK 需要处理必要的设备信息、网络信息、当前游戏小号信息和日志信息。\n\n"
+                + "请阅读《用户注册协议》《用户隐私协议》《儿童隐私保护指引》《第三方信息共享清单》。同意后进入账号登录。";
+        TextView body = UiKit.hint(host, "");
+        android.text.SpannableString sp = new android.text.SpannableString(bodyText);
+        linkProtocol(sp, bodyText, "《用户注册协议》", "register");
+        linkProtocol(sp, bodyText, "《用户隐私协议》", "privacy");
+        linkProtocol(sp, bodyText, "《儿童隐私保护指引》", "children");
+        linkProtocol(sp, bodyText, "《第三方信息共享清单》", "third-party");
+        body.setText(sp);
+        body.setMovementMethod(android.text.method.LinkMovementMethod.getInstance());
+        body.setHighlightColor(0x00000000);
         LinearLayout.LayoutParams bodyLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         bodyLp.topMargin = UiKit.dp(host, 14);
