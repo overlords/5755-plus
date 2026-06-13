@@ -531,6 +531,33 @@ public final class SdkUi implements FlowUi {
         card.getLayoutParams().width = fixedW;
         card.getLayoutParams().height = fixedH;
         card.requestLayout();
+
+        // 骑角关闭 ×(还原 m5755):加在 overlay 上、中心对准面板右上角(card 与 × 同为 CENTER,
+        // 再 translation 半个面板宽高即落到角上,避开状态栏坐标换算),点击关闭选择页。
+        TextView closeX = new TextView(host);
+        closeX.setText("×");
+        closeX.setTextSize(22);
+        closeX.setTextColor(0xFFA4A8B0);
+        closeX.setGravity(Gravity.CENTER);
+        closeX.setIncludeFontPadding(false);
+        closeX.setBackground(UiKit.roundedStroke(UiKit.WHITE, UiKit.dp(host, 21), 0xFFDEE1E8, UiKit.dp(host, 1)));
+        closeX.setElevation(UiKit.dp(host, 22));
+        closeX.setContentDescription("关闭小号选择页");
+        int xSize = UiKit.dp(host, 42);
+        overlay.addView(closeX, new FrameLayout.LayoutParams(xSize, xSize, Gravity.CENTER));
+        closeX.setTranslationX(fixedW / 2f);
+        closeX.setTranslationY(-fixedH / 2f);
+        closeX.bringToFront();
+        closeX.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                dismiss();
+                background.execute(new Runnable() {
+                    public void run() {
+                        controller.onPickerClosed(switchFlow);
+                    }
+                });
+            }
+        });
     }
 
     private void mountAutoEnter(final String account, String displayName) {
