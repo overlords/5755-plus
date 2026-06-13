@@ -203,7 +203,11 @@ smallText 行距 +2dp;hint 行距 +3dp。粗体使用 `Typeface.DEFAULT` + `Type
 - **交互与回调**:
   - 拒绝 → `onClosed("protocol")` + 关闭层(游戏侧自行决定退出)。
   - 同意 → 关闭层 + `onProtocolAccepted()`(随后进入登录)。
-- 新实现建议:四个协议名可做成可点击链接(旧实现为纯文本)。
+- **协议链接**(已实现):四个协议名为可点击链接(`PRIMARY_DEEP` 金色、无下划线),点击打开**站内网页层**(下):
+  - 全屏 WebView 层(标题栏 + `✕` 关闭按钮),叠在协议弹窗之上;
+  - `WebViewClient` 拦截 http/https **站内加载,不跳系统浏览器**;
+  - UserAgent 追加 `M5755Sdk/<版本>`(供后端/H5 识别 SDK 与版本);
+  - 地址 `https://p.xingninghuyu.com/agreement/{register,privacy,children,third-party}`(平台静态协议页;与用户中心动态 H5 分域)。
 
 ---
 
@@ -261,12 +265,12 @@ smallText 行距 +2dp;hint 行距 +3dp。粗体使用 `Typeface.DEFAULT` + `Type
   - 下方 1dp `LINE` 分割线。
 - **主体**(底色 `WEAK`,padding 24/12/24/8):
   - **标题行**(高 36dp):左 `选择小号进入游戏` 16sp 粗体 + `!` 信息圆标(18×18dp,白底 LINE 描边圆形,11sp 粗体 `MUTED`,左距 8dp);右 `添加小号` 按钮 **86×32dp**,白底圆角 8dp、文字 13sp:正常态文字与描边 `PRIMARY_DEEP`;**满 10 个**时文字 `#A6A9B0`、描边 `LINE`。
-  - **小号列表**(ScrollView,行高 62dp,首行顶距 12dp、其余 6dp,列表右 padding 16dp;超过 3 条时右侧显示 3dp×70dp `PRIMARY` 圆角装饰滚动条,距顶 36dp、距右 3dp):
-    - **小号行**(smallAccountItem):外层可点击;内层卡片高 48dp、顶距 14dp(给徽标留出叠放空间)、白底圆角 **3dp**、`LINE` 1dp 描边、elevation 2。
-      - 名称:label,14sp 粗体 `TEXT`,左距 16dp。
-      - `当前登录` 标签(仅当前登录小号):12sp 粗体 `#5D4300`,底 `#FFF9DF` 圆角 3dp,高 24dp,名称右侧 8dp。
-      - 右侧进入箭头:20dp 圆形 `PRIMARY` 底 + 右箭头图标(`m5755_ic_chevron_right_24`,tint `#5D4300`),距右 8dp,contentDescription `进入`。
-      - **默认徽标**(每行左上角叠放,偏移 左2dp/上8dp):白底圆角 6dp、LINE 描边、高 20dp、elevation 4;内含 14dp 圆形单选(选中:`PRIMARY` 圆底 + ✓ 10sp `#5D4300`;未选中:白底 LINE 描边)+ `默认` 文字 10sp `MUTED`。
+  - **小号列表**(ScrollView,`clipToPadding=false` 留卡片阴影;卡片间距 8dp;高度上限 320dp,超过可滚):
+    - **小号卡片**(SubAccountRow,**以设计系统为上游**,§0.4):外层 `FrameLayout` 容"默认"tab 骑边;内层卡片 **≥70dp 高、14dp 圆角**、白底、`#EAECEF` 1dp 细边、**软阴影**(elevation 2),内 padding 16/14/12/14,顶距 9dp 留 tab 骑边空间。整卡可点 → 进入。
+      - 名称:label,**16sp 粗体** `TEXT`,左,权重撑开。
+      - `当前登录` 标签(仅当前登录小号):12sp 粗体 `#5D4300`,底 `#FFF9DF` 圆角 3dp,名称右侧 8dp。
+      - 右侧进入箭头:**32dp 圆形** `PRIMARY` 底 + 右箭头(`m5755_ic_chevron_right_24`,tint `#5D4300`),contentDescription `进入`。
+      - **"默认"tab**(骑卡片**左上角**,左距 14dp、elevation 3):全圆角;选中 = `PRIMARY` 底 + `✓ 默认` `#5D4300` 文字;未选中 = 白底 `#D5D7DD` 描边 + `默认` `MUTED` 文字;11sp。点 tab 设默认(不进入,`stopPropagation`)。
 - **文案清单**:`选择小号进入游戏`、`添加小号`、`当前登录`、`默认`、`已设置默认小号`(toast)、`最多添加10个小号哦`(上限 toast)、`1个游戏下最多创建10个小号,每个小号独立`(说明弹窗,原文含换行)、`我知道了`、contentDescription:`关闭小号选择页`/`切换5755账户`/`进入`。
 - **交互与回调**:
   - 点小号行 → 记录当前小号 + `onSubAccountSelected(id)` → 进入登录态校验弹窗(valid=true)。
@@ -397,18 +401,10 @@ smallText 行距 +2dp;hint 行距 +3dp。粗体使用 `Typeface.DEFAULT` + `Type
 
 - **容器**:左侧全高抽屉(`Gravity.LEFT`),宽 `min(屏宽, max(520dp, 屏宽×0.58))`,底色 `DRAWER_BG #F5F6F8`,elevation 12;层非模态(右侧游戏区域可操作)。**竖屏下宽度上限 80% 屏宽(§1.12)**——任何方向都必须保留右侧游戏可见条,不得全屏遮挡。
 - **关闭按钮**:`×` 26sp、色 `#747880`,44×44dp,抽屉右上角(距顶 6dp、距右 8dp)→ `onClosed("user_center")` + 关闭层(含悬浮球;游戏侧可再调 showFloatBall)。
-- **WebView**(铺满抽屉):系统 WebView;`javaScriptEnabled=true`、`javaScriptCanOpenWindowsAutomatically=false`、`allowFileAccess=false`、`allowFileAccessFromFileURLs=false`、`allowUniversalAccessFromFileURLs=false`;`overScrollMode=NEVER`;JS 桥名 **`UserCenter`**。
-  - `loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)`——**空 baseURL(不可信 origin)**,不得伪造平台域名;平台真实用户中心 H5 属未来范围,接入后改为加载真实 URL。
-- **H5 内容规格**(本地最小容器,内联 HTML/CSS):
-  - 字体栈:`-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif`;body 底 `#f5f6f8`、文字 `#25272b`。
-  - **Hero 区**:min-height 172px,底色 **`#ffc936`**,padding `28px 64px 24px 28px`;头像 64px 白色圆形(文字 `账`,border 3px rgba(0,0,0,.08));标签 `当前游戏小号 ID`(13px,rgba(0,0,0,.55))+ 小号 ID 加粗 26px;hero 提示(14px,rgba(0,0,0,.62),行高 1.7):`用户中心接收 SDK 当前游戏小号上下文,不维护另一套当前账号。`
-  - **功能卡**(白色圆角 8px 卡片,上探叠入 hero:margin `-32px 18px 0`,阴影 `0 4px 18px rgba(0,0,0,.05)`):功能行高 58px、行间 1px `#f0f1f4` 分割、左右 padding 22px、文字 `#575b62` 加粗、行尾 `›` 箭头(`#a6a9b0`,26px)。当前仅两行:
-    - `切换小号` → `postAction('switch_account')`
-    - `退出登录` → `postAction('logout')`
-  - **底部说明**(13px,`#9aa0a8`,margin 18px 22px 24px):`当前为最小化用户中心容器,仅提供小号上下文、切换小号与退出登录;更多账号服务由平台用户中心 H5 提供(后续接入)。`
-- **JS 桥协议**:
-  - `UserCenter.getAccountContext()` → 返回 JSON 字符串 `{"accountId":"…"}`(页面加载时同步刷新显示)。
-  - `UserCenter.postAccountAction(action)` → 原生侧白名单归一化:仅接受 `logout` / `switch_account` / `session_invalid`,其余一律归一为 `unknown`;在 UI 线程回调 `onUserCenterAction(action)`。
+- **WebView**(铺满抽屉):系统 WebView;`javaScriptEnabled=true`、`javaScriptCanOpenWindowsAutomatically=false`、文件访问全关;`overScrollMode=NEVER`;**UserAgent 追加 `M5755Sdk/<版本>`**;`WebViewClient` 拦截 http/https **站内加载不外跳**;JS 桥名 **`UserCenter`**。
+- **加载源(#5,见 06 §3/§5)**:用户中心 = **平台真实 H5**,以**主账户为核心**;加载 `userCenterUrl`(经 `GET /config` 下发)并以查询参数带 `platformToken`(`?token=…` / 已含 query 则 `&`)供平台页拉取主账户内容。`userCenterUrl` 由平台配置(`games.user_center_url`),**不进静态协议域**,SDK 不硬编码。
+  - **未配置 URL 时**:最小回退本地容器(`loadDataWithBaseURL(null,…)`,空 baseURL),仅 `切换小号` / `退出登录` 两功能行 + 说明,**不展示游戏小号**。
+- **JS 桥协议(#5)**:仅 **`UserCenter.postAccountAction(action)`**——白名单归一:仅接受 `logout` / `switch_account` / `session_invalid`,其余归一 `unknown`;UI 线程回调 `onUserCenterAction(action)`。**已移除 `getAccountContext`**(平台 H5 凭 `platformToken` 自取主账户,SDK 不经 bridge 下发任何账户上下文)。
 - **边界**:用户中心不得扩展为通用 H5 容器(无文件上传、媒体选择、APK 下载安装、外部 App 跳转);功能行不得出现范围外业务(见 0.2)。
 
 ---
