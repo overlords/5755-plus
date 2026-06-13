@@ -7,6 +7,8 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.uiautomator.By;
 import androidx.test.uiautomator.UiDevice;
 import androidx.test.uiautomator.UiObject2;
+import androidx.test.uiautomator.UiScrollable;
+import androidx.test.uiautomator.UiSelector;
 import androidx.test.uiautomator.Until;
 
 import com.m5755.operate.core.gateway.HttpPlatformGateway;
@@ -68,6 +70,16 @@ final class TestHarness {
         o.click();
     }
 
+    /** 滚动样例主屏 ScrollView 直到 text 可见(横屏按钮列表过长、目标在折叠线下时用)。 */
+    void scrollToText(String text) throws Exception {
+        if (hasText(text, 1000)) {
+            return;
+        }
+        UiScrollable sv = new UiScrollable(new UiSelector().scrollable(true));
+        sv.setAsVerticalList();
+        sv.scrollTextIntoView(text);
+    }
+
     /** 精确文本匹配(规避「登录」「进入游戏」等前缀歧义)。 */
     void tapExact(String text) {
         device.wait(Until.hasObject(By.text(text)), WAIT);
@@ -119,6 +131,30 @@ final class TestHarness {
         waitText("请输入身份证号").setText("11010119900101001X");
         tapExact("提交");
         assertTrue("实名通过应进小号选择页", hasText("选择小号进入游戏", WAIT));
+    }
+
+    /** 全链路进入游戏内(选择页 → 小号1 → 登录态校验 → 进入游戏)。 */
+    void toGame(String phone) throws Exception {
+        toSubaccountPicker(phone);
+        tapExact("小号1");
+        assertTrue("应展示登录态校验弹窗", hasText("登录态校验通过", WAIT));
+        tapExact("进入游戏");
+        assertTrue("应进入游戏(登录成功)", hasText("登录成功 account=", WAIT));
+    }
+
+    /** 控件水平中心是否在右半屏(横屏右侧抽屉判定)。 */
+    boolean centerInRightHalf(String text) {
+        UiObject2 o = device.findObject(By.text(text));
+        assertNotNull("找不到控件: " + text, o);
+        android.graphics.Rect b = o.getVisibleBounds();
+        return (b.left + b.right) / 2 > device.getDisplayWidth() / 2;
+    }
+
+    /** 控件顶边是否在下半屏(竖屏底部抽屉判定)。 */
+    boolean topInBottomHalf(String text) {
+        UiObject2 o = device.findObject(By.text(text));
+        assertNotNull("找不到控件: " + text, o);
+        return o.getVisibleBounds().top > device.getDisplayHeight() / 2;
     }
 
     // ===== dev 控制面(签名直调) =====
