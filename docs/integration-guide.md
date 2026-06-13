@@ -25,12 +25,12 @@ dependencies {
 <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 ```
 
-承载 SDK 浮层的游戏 Activity 应自行处理配置变化,避免横竖屏切换时浮层被重建:
+承载 SDK 浮层的游戏 Activity **须**声明 `configChanges`,避免横竖屏切换时 Activity 重建、SDK 浮层连同输入/勾选/倒计时态一并丢失(07 §1.12「开屏即定」;未声明时接入自检输出诊断警告,不阻断):
 
 ```xml
 <activity
     android:name=".MainActivity"
-    android:configChanges="orientation|keyboardHidden|screenSize" />
+    android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout" />
 ```
 
 环境、渠道、签名由交付 AAR 的构建配置固定,**不通过参数透传或运行时切换**(`01 §5`)。
