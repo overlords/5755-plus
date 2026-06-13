@@ -369,53 +369,83 @@ public final class SdkUi implements FlowUi {
         LinearLayout rows = new LinearLayout(host);
         rows.setOrientation(LinearLayout.VERTICAL);
         scroll.addView(rows);
-        // 设计系统 SubAccountRow:独立白卡(≥70dp,14dp 圆角,细边,软阴影)+ 左上角「默认」tab + 右侧金色进入箭头
+        // 设计系统 SubAccountRow(精确还原):白卡(≥70dp/14dp 圆角/细边/软阴影)+ 左上角「默认」圆选 tab + 右侧金圆 chevron 箭头
         for (final Results.SubaccountList.Item it : list.items) {
             FrameLayout wrap = new FrameLayout(host);
 
             LinearLayout cardRow = new LinearLayout(host);
             cardRow.setOrientation(LinearLayout.HORIZONTAL);
             cardRow.setGravity(Gravity.CENTER_VERTICAL);
-            cardRow.setBackground(UiKit.roundedStroke(UiKit.WHITE, UiKit.dp(host, 14), 0xFFEAECEF, UiKit.dp(host, 1)));
-            cardRow.setElevation(UiKit.dp(host, 2));
-            cardRow.setPadding(UiKit.dp(host, 16), UiKit.dp(host, 14), UiKit.dp(host, 12), UiKit.dp(host, 14));
+            cardRow.setBackground(UiKit.roundedStroke(UiKit.WHITE, UiKit.dp(host, 14), UiKit.LINE, UiKit.dp(host, 1)));
+            cardRow.setElevation(UiKit.dp(host, 3));
+            cardRow.setPadding(UiKit.dp(host, 20), 0, UiKit.dp(host, 14), 0); // 无垂直 padding,名称居中
             FrameLayout.LayoutParams crLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 70));
-            crLp.topMargin = UiKit.dp(host, 9); // 留出顶部 tab 骑边空间
+            crLp.topMargin = UiKit.dp(host, 11);
 
             TextView nameTv = new TextView(host);
             nameTv.setText(it.displayName);
             nameTv.setTextSize(16);
             nameTv.setTextColor(UiKit.TEXT);
             nameTv.getPaint().setFakeBoldText(true);
-            cardRow.addView(nameTv, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+            cardRow.addView(nameTv);
+            View spacer = new View(host);
+            cardRow.addView(spacer, new LinearLayout.LayoutParams(0, 1, 1));
 
-            TextView arrow = new TextView(host); // 金色圆形进入箭头
-            arrow.setText("›");
-            arrow.setTextSize(20);
-            arrow.setTextColor(UiKit.PRIMARY_DEEP);
-            arrow.setGravity(Gravity.CENTER);
-            arrow.setBackground(UiKit.rounded(UiKit.PRIMARY, UiKit.dp(host, 999)));
-            LinearLayout.LayoutParams arLp = new LinearLayout.LayoutParams(UiKit.dp(host, 32), UiKit.dp(host, 32));
-            cardRow.addView(arrow, arLp);
+            FrameLayout arrowWrap = new FrameLayout(host); // 32dp 金圆 + chevron
+            arrowWrap.setBackground(UiKit.rounded(UiKit.PRIMARY, UiKit.dp(host, 999)));
+            View chevron = new View(host) {
+                private final android.graphics.Paint pp = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+                @Override
+                protected void onDraw(android.graphics.Canvas c) {
+                    int w = getWidth(), h = getHeight();
+                    pp.setColor(0xFF5D4300);
+                    pp.setStyle(android.graphics.Paint.Style.STROKE);
+                    pp.setStrokeWidth(w * 2.4f / 24f);
+                    pp.setStrokeCap(android.graphics.Paint.Cap.ROUND);
+                    pp.setStrokeJoin(android.graphics.Paint.Join.ROUND);
+                    float sx = w / 24f, sy = h / 24f;
+                    android.graphics.Path path = new android.graphics.Path();
+                    path.moveTo(9 * sx, 6 * sy);
+                    path.lineTo(15 * sx, 12 * sy);
+                    path.lineTo(9 * sx, 18 * sy);
+                    c.drawPath(path, pp);
+                }
+            };
+            FrameLayout.LayoutParams chLp = new FrameLayout.LayoutParams(UiKit.dp(host, 15), UiKit.dp(host, 15));
+            chLp.gravity = Gravity.CENTER;
+            arrowWrap.addView(chevron, chLp);
+            cardRow.addView(arrowWrap, new LinearLayout.LayoutParams(UiKit.dp(host, 32), UiKit.dp(host, 32)));
 
             wrap.addView(cardRow, crLp);
 
-            final TextView tab = new TextView(host); // 「默认」骑在卡片左上角
-            tab.setText(it.isDefault ? "✓ 默认" : "默认");
-            tab.setTextSize(11);
-            tab.setGravity(Gravity.CENTER);
-            tab.setPadding(UiKit.dp(host, 10), UiKit.dp(host, 3), UiKit.dp(host, 10), UiKit.dp(host, 3));
+            // 「默认」tab:7px 白药丸 + 16dp 圆选 + 标签,骑卡片左上角
+            final LinearLayout tab = new LinearLayout(host);
+            tab.setOrientation(LinearLayout.HORIZONTAL);
+            tab.setGravity(Gravity.CENTER_VERTICAL);
+            tab.setBackground(UiKit.roundedStroke(UiKit.WHITE, UiKit.dp(host, 7), UiKit.LINE, UiKit.dp(host, 1)));
+            tab.setElevation(UiKit.dp(host, 2));
+            tab.setPadding(UiKit.dp(host, 10), 0, UiKit.dp(host, 10), 0);
+            TextView radio = new TextView(host);
+            radio.setGravity(Gravity.CENTER);
+            radio.setTextSize(10);
             if (it.isDefault) {
-                tab.setTextColor(UiKit.PRIMARY_DEEP);
-                tab.setBackground(UiKit.rounded(UiKit.PRIMARY, UiKit.dp(host, 999)));
+                radio.setText("✓");
+                radio.setTextColor(UiKit.BTN_TEXT_ON_PRIMARY);
+                radio.setBackground(UiKit.rounded(UiKit.PRIMARY, UiKit.dp(host, 999)));
             } else {
-                tab.setTextColor(UiKit.MUTED);
-                tab.setBackground(UiKit.roundedStroke(UiKit.WHITE, UiKit.dp(host, 999), 0xFFD5D7DD, UiKit.dp(host, 1)));
+                radio.setText("");
+                radio.setBackground(UiKit.roundedStroke(UiKit.WHITE, UiKit.dp(host, 999), 0xFFD5D7DD, UiKit.dp(host, 1)));
             }
-            tab.setElevation(UiKit.dp(host, 3));
-            FrameLayout.LayoutParams tabLp = new FrameLayout.LayoutParams(
-                    ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            tabLp.leftMargin = UiKit.dp(host, 14);
+            LinearLayout.LayoutParams radLp = new LinearLayout.LayoutParams(UiKit.dp(host, 16), UiKit.dp(host, 16));
+            radLp.rightMargin = UiKit.dp(host, 7);
+            tab.addView(radio, radLp);
+            TextView tlabel = new TextView(host);
+            tlabel.setText("默认");
+            tlabel.setTextSize(12);
+            tlabel.setTextColor(it.isDefault ? UiKit.PRIMARY_DEEP : UiKit.MUTED);
+            tab.addView(tlabel);
+            FrameLayout.LayoutParams tabLp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, UiKit.dp(host, 24));
+            tabLp.leftMargin = UiKit.dp(host, 16);
             wrap.addView(tab, tabLp);
 
             cardRow.setClickable(true);
@@ -437,7 +467,7 @@ public final class SdkUi implements FlowUi {
                     });
                 }
             });
-            LinearLayout.LayoutParams wrapLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 81));
+            LinearLayout.LayoutParams wrapLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 85));
             wrapLp.topMargin = UiKit.dp(host, 8);
             rows.addView(wrap, wrapLp);
         }
