@@ -105,23 +105,31 @@ func TestUserCenterProfile_Invalid(t *testing.T) {
 	}
 }
 
-// CORS 预检:允许域回 ACAO,OPTIONS 返回 204。
+// CORS 预检:允许域回 ACAO,OPTIONS 返回 204,且放行自定义 token 头。
+// 覆盖两类允许 origin:dev 放行的 localhost,以及生产 uc SPA 域(ADR-0010 选②绝对域
+// 跨域调用的命脉——SPA 在 uc.* 调平台服务端 /api/uc/v2,全靠这条回显成立)。
 func TestUserCenterProfile_CORSPreflight(t *testing.T) {
 	srv, _ := setup(t)
 
-	req, _ := http.NewRequest("OPTIONS", srv.URL+"/api/uc/v2/profile", nil)
-	req.Header.Set("Origin", "http://localhost:8080") // dev 模式放行 localhost
-	req.Header.Set("Access-Control-Request-Method", "GET")
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("预检失败: %v", err)
-	}
-	res.Body.Close()
-	if res.StatusCode != http.StatusNoContent {
-		t.Errorf("OPTIONS 期望 204,得到 %d", res.StatusCode)
-	}
-	if res.Header.Get("Access-Control-Allow-Origin") != "http://localhost:8080" {
-		t.Errorf("ACAO 应回显 localhost origin,得到 %q", res.Header.Get("Access-Control-Allow-Origin"))
+	for _, origin := range []string{"http://localhost:8080", "https://uc.xingninghuyu.com"} {
+		req, _ := http.NewRequest("OPTIONS", srv.URL+"/api/uc/v2/profile", nil)
+		req.Header.Set("Origin", origin)
+		req.Header.Set("Access-Control-Request-Method", "GET")
+		req.Header.Set("Access-Control-Request-Headers", "x-m5755-platform-token, content-type")
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("预检失败(%s): %v", origin, err)
+		}
+		res.Body.Close()
+		if res.StatusCode != http.StatusNoContent {
+			t.Errorf("origin=%s OPTIONS 期望 204,得到 %d", origin, res.StatusCode)
+		}
+		if got := res.Header.Get("Access-Control-Allow-Origin"); got != origin {
+			t.Errorf("origin=%s ACAO 应回显该 origin,得到 %q", origin, got)
+		}
+		if ah := res.Header.Get("Access-Control-Allow-Headers"); !strings.Contains(ah, headerPlatformToken) {
+			t.Errorf("origin=%s 预检应放行 %s 头,得到 %q", origin, headerPlatformToken, ah)
+		}
 	}
 }
 

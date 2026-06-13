@@ -1,11 +1,9 @@
 /* 用户中心 H5 — 数据层 + bridge 封装
  * 规格:docs/06a-user-center-h5-page.md §3/§6/§7;鉴权 ADR-0010。
  *
- * 数据面 /api/uc/v2/* 六端点服务端已实现(internal/api/api_uc.go),real 已逐一对齐。
- * 仍默认 USE_MOCK=true;翻 false 前还需两件部署侧事:
- *   1) 网络路径:BASE 相对路径会打到 SPA 自身域(uc.*),需 nginx 反代 /api/uc/v2 →
- *      平台服务端,或把 BASE 改绝对域(CORS 已默认放行 uc.xingninghuyu.com);
- *   2) 把含这批端点的服务端部署到 dev(CTID 105)。
+ * 数据面 /api/uc/v2/* 六端点服务端已实现(internal/api/api_uc.go),real 已逐一对齐;
+ * 网络路径选②绝对域(见下 API_ORIGIN),USE_MOCK=false 走真接口。
+ * 上线顺序:先部署服务端到 dev(CTID 105,/api/uc/v2 生效)→ 再部署本 SPA(CTID 107)。
  */
 
 // ---- platformToken 捕获(纯函数,06a §7;可测)----
@@ -35,8 +33,12 @@ function classifyResponse(status, json) {
 }
 
 const UC = (() => {
-  const USE_MOCK = true;                 // ← /api/uc/v2 就位后改 false
-  const BASE = '/api/uc/v2';
+  const USE_MOCK = false;                // 数据面已就位,走真接口(本地预览无服务端时临时置 true)
+  // API 源(ADR-0010,网络路径选②绝对域):SPA 在 uc.* 静态域,跨域调平台服务端
+  // dev 部署的 /api/uc/v2,靠服务端 CORS 放行(ucAllowedOrigins 默认含 uc.xingninghuyu.com)。
+  // 同源反代(选①)时改空串即回退相对路径;生产改 https://sdk.xingninghuyu.com。
+  const API_ORIGIN = 'https://sdk-dev.xingninghuyu.com';
+  const BASE = API_ORIGIN + '/api/uc/v2';
 
   // ---- platformToken:加载即读入内存并抹除可见 URL(06a §7) ----
   let platformToken = '';
