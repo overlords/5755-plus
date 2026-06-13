@@ -66,8 +66,9 @@ public class OperatingLoopTest {
     public void userCenterSwitchAccountEntersPicker() throws Exception {
         loginToGame();
         // 悬浮球"账" → 用户中心 → 切换小号 → 小号选择页
+        // #5 后用户中心 = 平台 H5(以主账户为核心);dev demo 未配 userCenterUrl → SDK 回退页
         h.tapExact("账");
-        assertTrue("用户中心展示当前小号", h.hasText("当前游戏小号 ID", TestHarness.WAIT));
+        assertTrue("用户中心应展示(回退页)", h.hasText("最小回退", TestHarness.WAIT));
         h.tapExact("切换小号");
         assertTrue("切换小号进选择页", h.hasText("选择小号进入游戏", TestHarness.WAIT));
         assertTrue("不触发登出", !h.hasText("账号变化", 1500));
