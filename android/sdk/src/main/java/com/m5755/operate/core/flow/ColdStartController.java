@@ -442,6 +442,9 @@ public final class ColdStartController {
 
     // ===== #28 支付 =====
 
+    /** 当前挂起的支付客户端回调:cb 下沉到容器终态单次 fire(05 §3.1),由 onPayContainerClosed 消费。 */
+    private com.m5755.operate.api.Listener pendingPayCb;
+
     public void recharge(com.m5755.operate.api.Order order, com.m5755.operate.api.Listener cb) {
         String account = storage.getAccount();
         String token = storage.getSubaccountToken();
@@ -477,9 +480,33 @@ public final class ColdStartController {
         display.put("区服", order.getServerName());
         display.put("角色", order.getRoleName());
         display.put("订单号", r.platformOrderId);
+        // 客户端支付回调下沉到容器终态:暂存 cb,由 onPayContainerClosed 在收银台/订单抽屉关闭时单次 fire。
+        // (旧实现在此处下单即报"已交接"——玩家还没进收银台就假报,已移除;05 §3.1 三态只在客户端流程终点回调)
+        if (pendingPayCb != null) {
+            done(pendingPayCb, false, com.m5755.operate.provider.OperateCode.CANCELED, "未完成"); // 兜底:上一笔容器未正常关闭,防 cb 泄漏
+        }
+        pendingPayCb = cb;
         ui.showPayDrawer(display, r.paymentUrl);
-        // 客户端支付状态:容器交接后为"已交接"(仅 UI 口径,不表示到账)
-        done(cb, true, 0, "已交接");
+    }
+
+    /**
+     * 支付容器终态(收银台 / 订单确认抽屉关闭):客户端支付回调单次 fire(05 §3.1)。
+     * handed=true→已交接(SUCCESS),否则→未完成(CANCELED)。"处理中"由容器打开态本身承载、不经 cb。
+     * 取出即置 null,保证一次 recharge 只回调一次(吞掉返回键与未来 sentinel 的竞合);与 recharge 同在
+     * background 单线程,无需额外同步。注:已交接仅 UI 口径、不表示到账,发货唯一依据是充值回调;当前无
+     * 收银台结果信号时一律保守判未完成、绝不假报已交接(已交接/未完成的明确区分靠 #60 收银台 return-URL)。
+     */
+    public void onPayContainerClosed(boolean handed) {
+        com.m5755.operate.api.Listener cb = pendingPayCb;
+        pendingPayCb = null;
+        if (cb == null) {
+            return;
+        }
+        if (handed) {
+            done(cb, true, com.m5755.operate.provider.OperateCode.SUCCESS, "已交接");
+        } else {
+            done(cb, false, com.m5755.operate.provider.OperateCode.CANCELED, "未完成");
+        }
     }
 
     private static String validateOrder(com.m5755.operate.api.Order o) {

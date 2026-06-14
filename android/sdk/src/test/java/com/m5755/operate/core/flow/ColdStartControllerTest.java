@@ -327,6 +327,70 @@ public class ColdStartControllerTest {
         assertFalse("不触发账号变化", f.listener.logoutCalled);
     }
 
+    @Test
+    public void rechargeOKDoesNotFireHandedOffOnOrderCreate() {
+        // 口径漏洞回归:下单成功不得立即报"已交接"——cb 须挂起到容器终态(05 §3.1)
+        Fixture f = loggedInWithSubaccount();
+        f.gw.orderCreate.ok = true;
+        f.gw.orderCreate.platformOrderId = "P5755x";
+        f.gw.orderCreate.paymentUrl = "https://sdk-dev/pay/P5755x";
+        final int[] calls = {0};
+        f.c.recharge(validOrder(), (s, code, m) -> calls[0]++);
+        assertEquals("下单成功不应立即回调(已交接下沉到容器终态)", 0, calls[0]);
+        assertTrue("应展示支付容器", f.ui.calls.contains("showPayDrawer"));
+    }
+
+    @Test
+    public void payContainerClosedHandedFiresHandedOff() {
+        Fixture f = loggedInWithSubaccount();
+        f.gw.orderCreate.ok = true;
+        f.gw.orderCreate.platformOrderId = "P5755x";
+        f.gw.orderCreate.paymentUrl = "https://sdk-dev/pay/P5755x";
+        final int[] calls = {0};
+        final boolean[] ok = {false};
+        final int[] code = {-1};
+        final String[] msg = {null};
+        f.c.recharge(validOrder(), (s, c, m) -> { calls[0]++; ok[0] = s; code[0] = c; msg[0] = m; });
+        f.c.onPayContainerClosed(true);
+        assertEquals(1, calls[0]);
+        assertTrue("已交接=成功", ok[0]);
+        assertEquals(com.m5755.operate.provider.OperateCode.SUCCESS, code[0]);
+        assertEquals("已交接", msg[0]);
+    }
+
+    @Test
+    public void payContainerClosedNotHandedFiresNotCompleted() {
+        Fixture f = loggedInWithSubaccount();
+        f.gw.orderCreate.ok = true;
+        f.gw.orderCreate.platformOrderId = "P5755x";
+        f.gw.orderCreate.paymentUrl = "https://sdk-dev/pay/P5755x";
+        final int[] calls = {0};
+        final boolean[] ok = {true};
+        final int[] code = {-1};
+        final String[] msg = {null};
+        f.c.recharge(validOrder(), (s, c, m) -> { calls[0]++; ok[0] = s; code[0] = c; msg[0] = m; });
+        f.c.onPayContainerClosed(false); // 无收银台信号→保守判未完成
+        assertEquals(1, calls[0]);
+        assertFalse("未完成=失败", ok[0]);
+        assertEquals(com.m5755.operate.provider.OperateCode.CANCELED, code[0]);
+        assertEquals("未完成", msg[0]);
+    }
+
+    @Test
+    public void payContainerClosedFiresExactlyOnce() {
+        // 单次触发:多次终态信号(返回键与未来 sentinel 竞合)只回调一次
+        Fixture f = loggedInWithSubaccount();
+        f.gw.orderCreate.ok = true;
+        f.gw.orderCreate.platformOrderId = "P5755x";
+        f.gw.orderCreate.paymentUrl = "https://sdk-dev/pay/P5755x";
+        final int[] calls = {0};
+        f.c.recharge(validOrder(), (s, c, m) -> calls[0]++);
+        f.c.onPayContainerClosed(false);
+        f.c.onPayContainerClosed(false);
+        f.c.onPayContainerClosed(true);
+        assertEquals("一次 recharge 只回调一次客户端支付回调", 1, calls[0]);
+    }
+
     // ===== #29 密码登录 / 设备验证 =====
 
     @Test
