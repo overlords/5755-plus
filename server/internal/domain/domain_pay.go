@@ -63,8 +63,8 @@ func (svc *Service) GetCashierOrder(ctx context.Context, platformOrderID string)
 //   - "url":直接把 RedirectURL 加载进 WebView(支付宝 wap / 微信 H5)。
 //   - "jsapi":返回 JSAPIPayParams(收银台内 WeixinJSBridge 调起),需 openid。
 type PrepayResult struct {
-	Kind          string
-	RedirectURL   string
+	Kind           string
+	RedirectURL    string
 	JSAPIPayParams map[string]string
 }
 
