@@ -449,11 +449,13 @@ public final class ColdStartController {
         String account = storage.getAccount();
         String token = storage.getSubaccountToken();
         if (account == null || token == null) {
+            android.util.Log.w("M5755Sdk", "recharge_failed reason=not_logged_in");
             done(cb, false, com.m5755.operate.provider.OperateCode.NOT_INITIALIZED, "未登录或登录令牌为空");
             return;
         }
         String err = validateOrder(order);
         if (err != null) {
+            android.util.Log.w("M5755Sdk", "recharge_failed reason=param_invalid detail=" + err);
             done(cb, false, com.m5755.operate.provider.OperateCode.PARAM_ERROR, err); // 无演示订单兜底
             return;
         }
@@ -468,10 +470,28 @@ public final class ColdStartController {
         body.put("roleLevel", order.getRoleLevel());
         Results.OrderCreate r = gateway.createOrder(gameId, account, token, body);
         if (!r.ok) {
-            // 防沉迷支付门禁仅失败本次支付,不触发账号变化(03 §3)
+            // 诊断:区分防沉迷门禁/小号失效/平台失败(05 §4 可采集诊断),客服据此区分而非靠 message
+            android.util.Log.w("M5755Sdk", "recharge_failed reason=" + r.reason);
+            if (Reason.SUBACCOUNT_INVALID.equals(r.reason)) {
+                // 失效分流硬规则:小号失效 → 失败本次支付 + 账号变化 + 回小号选择,不收敛为普通失败
+                done(cb, false, com.m5755.operate.provider.OperateCode.FAILURE, r.message);
+                listener.onLogout();
+                ui.showPickerNotice("游戏小号已失效,请重新选择");
+                refreshPicker(false);
+                return;
+            }
+            // 防沉迷支付门禁等仅失败本次支付,不触发账号变化(03 §3)
             done(cb, false, com.m5755.operate.provider.OperateCode.FAILURE, r.message);
             return;
         }
+        // paymentUrl 校验:非空入口必须是 http(s) 支付台(05 §2.5),非法即失败、不展示 mock 收银台
+        if (r.paymentUrl != null && !r.paymentUrl.isEmpty()
+                && !r.paymentUrl.startsWith("http://") && !r.paymentUrl.startsWith("https://")) {
+            android.util.Log.w("M5755Sdk", "recharge_failed reason=invalid_payment_url");
+            done(cb, false, com.m5755.operate.provider.OperateCode.FAILURE, "支付入口非法");
+            return;
+        }
+        android.util.Log.i("M5755Sdk", "recharge order_created platformOrderId=" + r.platformOrderId);
         // 展示支付容器(订单显示取自 Order 入参,05 §2.3)
         java.util.Map<String, String> display = new java.util.LinkedHashMap<String, String>();
         display.put("商品", order.getCommodity());

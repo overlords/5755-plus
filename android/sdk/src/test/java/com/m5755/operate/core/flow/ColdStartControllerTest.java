@@ -328,6 +328,18 @@ public class ColdStartControllerTest {
     }
 
     @Test
+    public void rechargeSubaccountInvalidRoutesWithAccountChange() {
+        // 失效分流:小号失效(subaccount_invalid)→ 失败本次支付 + 触发账号变化(对照防沉迷门禁不触发)
+        Fixture f = loggedInWithSubaccount();
+        f.gw.orderCreate.ok = false;
+        f.gw.orderCreate.reason = "subaccount_invalid";
+        final boolean[] cb = {true};
+        f.c.recharge(validOrder(), (s, code, m) -> cb[0] = s);
+        assertFalse("支付失败本次", cb[0]);
+        assertTrue("小号失效触发账号变化", f.listener.logoutCalled);
+    }
+
+    @Test
     public void rechargeOKDoesNotFireHandedOffOnOrderCreate() {
         // 口径漏洞回归:下单成功不得立即报"已交接"——cb 须挂起到容器终态(05 §3.1)
         Fixture f = loggedInWithSubaccount();
