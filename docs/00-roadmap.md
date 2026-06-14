@@ -61,7 +61,7 @@
 | 范围 | 以主账户为核心:身份/账号安全/换绑手机/修改密码/充值订单等(06a)。 |
 | 工程落位 | `uc/` 纯静态 SPA(无构建)部署 CTID 107(`uc.xingninghuyu.com`);`/api/uc/v2` 在现服务端 `internal/api`(`platformToken` Bearer 鉴权、不走 HMAC,与网关面并列独立,ADR-0010)。 |
 | 口径 | 06a(SPA 信息架构/数据 API)、ADR-0010(API 面)、06(容器与 bridge)。 |
-| 状态 | **v1 dev 贯通达成(2026-06-13)**:`/api/uc/v2` 六端点(profile / orders / 换绑手机 / 改密)部署 dev(CTID 105);uc SPA `USE_MOCK=false` 走绝对域真接口、上线 CTID 107;网关铸 token → uc 真读(profile/orders)+ 真写(换绑回显新号、不登出)全链 live 验证通过。生产 uc 面随主轴 GA 真平台一并落地。 |
+| 状态 | **v1 dev 贯通达成(2026-06-13)**:`/api/uc/v2` 六端点(profile / orders / 换绑手机 / 改密)部署 dev(CTID 105);uc SPA `USE_MOCK=false` 走绝对域真接口、上线 CTID 107;网关铸 token → uc 真读(profile/orders)+ 真写(换绑回显新号、不登出)全链手动 live 走通(**留存证据/acceptance 截图待补**:合并前补;uc SPA 四页验收属支轨 A 自身、另行收口)。生产 uc 面随主轴 GA 真平台一并落地。 |
 | 关系 | **不阻塞** v2 SDK GA;独立排期。纳入 v2 正式出货须走 `01 §5` 评审。 |
 | 入口 | `user-center-h5` 分支(uc SPA + /api/uc/v2 + 部署 + WebView 加载态 #50/#51)。 |
 

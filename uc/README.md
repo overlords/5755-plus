@@ -23,8 +23,7 @@ cd uc && python3 -m http.server 8080
 
 ## 数据 API
 
-`api.js` 默认 `USE_MOCK = true`(因 `/api/uc/v2/*` 尚未实现,见 06a)。
-真接口就位后把 `USE_MOCK` 置 `false` 即可——`real.*` 的 fetch 路径、`X-M5755-Platform-Token` 头、`platform_account_invalid`/401 → `session_invalid` 收口都已按 06a §3 写好。
+`api.js` 默认 `USE_MOCK = false`,走真接口:`/api/uc/v2/*` 六端点已实现(profile / orders / 换绑手机 / 改密),`BASE` 为绝对域 `https://sdk-dev.xingninghuyu.com/api/uc/v2`(ADR-0010 网络路径选②;靠服务端 CORS 放行)。本地无服务端预览时临时置 `true`;生产改 `https://sdk.xingninghuyu.com`。`real.*` 的 fetch 路径、`X-M5755-Platform-Token` 头、`platform_account_invalid`/401 → `session_invalid` 收口按 06a §3。
 
 ## 与 SDK 的契约边界
 
