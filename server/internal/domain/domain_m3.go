@@ -27,9 +27,9 @@ import (
 var amountRe = regexp.MustCompile(`^\d+\.\d{2}$`)
 
 type RoleInput struct {
-	GameID, Account, Token                               string
-	ServerID, ServerName, RoleID, RoleName, RoleLevel    string
-	RoleCE, RoleStage, RoleRechargeAmount, RoleGuild     string
+	GameID, Account, Token                            string
+	ServerID, ServerName, RoleID, RoleName, RoleLevel string
+	RoleCE, RoleStage, RoleRechargeAmount, RoleGuild  string
 }
 
 func (svc *Service) ReportRole(ctx context.Context, in RoleInput) (*Fault, map[string]bool) {
@@ -64,10 +64,10 @@ func (svc *Service) ReportRole(ctx context.Context, in RoleInput) (*Fault, map[s
 // ---------- #22 支付创建 / 订单查询 ----------
 
 type OrderInput struct {
-	GameID, Account, Token                            string
-	Amount                                            float64
-	CPOrderID, Commodity, ServerID, ServerName        string
-	RoleID, RoleName, RoleLevel                       string
+	GameID, Account, Token                     string
+	Amount                                     float64
+	CPOrderID, Commodity, ServerID, ServerName string
+	RoleID, RoleName, RoleLevel                string
 }
 
 type OrderCreateData struct {
@@ -202,6 +202,48 @@ func (svc *Service) CompletePayment(ctx context.Context, gameID, platformOrderID
 	svc.log().Info("callback_settled", "platformOrderId", platformOrderID, "gameId", gameID,
 		"account", maskAccount(o.Account), "cpOrderId", o.CPOrderID, "callbackStatus", status, "mode", mode)
 	return nil
+}
+
+// RedeliverPendingCallbacks 平台侧充值回调重投巡检:对"已支付但出站未送达(投递失败/投递中)"的订单重投。
+// 这是漏发自愈的关键——渠道确认支付后即 ACK 止重推(渠道不会再推同笔),出站充值回调的最终送达不靠渠道重推,
+// 由本巡检补偿;游戏服务端对同笔回调幂等(04 §4),重投安全。返回本轮尝试数与确认数。
+func (svc *Service) RedeliverPendingCallbacks(ctx context.Context) (attempted, confirmed int) {
+	orders, err := svc.store.ListUndeliveredPaidOrders(ctx, 100)
+	if err != nil {
+		svc.log().Warn("callback_redeliver_list_failed", "err", err.Error())
+		return 0, 0
+	}
+	for i := range orders {
+		o := orders[i]
+		callbackURL, err := svc.store.GetCallbackURL(ctx, o.GameID)
+		if err != nil || callbackURL == "" {
+			continue // 无回调地址无法重投(订单已落"无回调地址"或游戏缺配),非本巡检可补偿
+		}
+		attempted++
+		if svc.dispatchCallback(callbackURL, &o) {
+			_ = svc.store.UpdateOrderStatus(ctx, o.PlatformOrderID, "已支付", "已确认")
+			confirmed++
+			svc.log().Info("callback_redelivered", "platformOrderId", o.PlatformOrderID, "gameId", o.GameID)
+		}
+	}
+	if attempted > 0 {
+		svc.log().Info("callback_redeliver_sweep", "attempted", attempted, "confirmed", confirmed)
+	}
+	return attempted, confirmed
+}
+
+// RunCallbackRetryLoop 后台定时重投巡检,直至 ctx 取消(进程退出)。
+func (svc *Service) RunCallbackRetryLoop(ctx context.Context, interval time.Duration) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			svc.RedeliverPendingCallbacks(ctx)
+		}
+	}
 }
 
 // dispatchCallback 向游戏服务端推送充值回调,有限重试;游戏侧 {code:200,msg:success} 视为确认。

@@ -217,6 +217,45 @@ func TestCallbackDispatchAndIdempotentRepush(t *testing.T) {
 	}
 }
 
+// TestRedeliverPendingCallbacksHealsFailedDelivery 验证 blocker 修复:出站投递失败的订单
+// 不靠渠道重推、由平台侧巡检重投自愈。游戏服务端先 500(投递失败)→ 恢复 → 巡检 → 已确认。
+func TestRedeliverPendingCallbacksHealsFailedDelivery(t *testing.T) {
+	srv, st := setup(t)
+	rec := newReceiver()
+	defer rec.srv.Close()
+	rec.mu.Lock()
+	rec.ackBad = true // 游戏服务端先抖动:回 500 → 投递失败
+	rec.mu.Unlock()
+	if err := st.SetCallbackURL(t.Context(), seedGame, rec.srv.URL); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.SetCallbackURL(t.Context(), seedGame, "") })
+
+	account, token, _ := loginToSubaccount(t, srv)
+	ar := doSignedH(t, srv.URL, "POST", "/api/sdk/v2/orders", "", orderBody(account, token, nil), nil)
+	orderID := ar.Data["platformOrderId"].(string)
+
+	// complete-payment:回调投递失败 → 订单卡在 已支付/投递失败(漏发前置)
+	cb, _ := json.Marshal(map[string]string{"gameId": seedGame, "orderId": orderID, "mode": "成功"})
+	doSignedH(t, srv.URL, "POST", "/internal/dev-control/complete-payment", "", cb, nil)
+	q := fmt.Sprintf("gameId=%s&account=%s", seedGame, account)
+	if qr := doSignedH(t, srv.URL, "GET", "/api/sdk/v2/orders/"+orderID, q, nil, map[string]string{"X-M5755-Token": token}); qr.Data["callbackStatus"] != "投递失败" {
+		t.Fatalf("漏发前置不成立,应 投递失败: %+v", qr.Data)
+	}
+
+	// 游戏服务端恢复 → 平台侧巡检重投(不依赖渠道重推)→ 自愈为已确认
+	rec.mu.Lock()
+	rec.ackBad = false
+	rec.mu.Unlock()
+	attempted, confirmed := domain.New(st).RedeliverPendingCallbacks(t.Context())
+	if attempted < 1 || confirmed < 1 {
+		t.Fatalf("重投应尝试并确认 ≥1 笔,得 attempted=%d confirmed=%d", attempted, confirmed)
+	}
+	if qr2 := doSignedH(t, srv.URL, "GET", "/api/sdk/v2/orders/"+orderID, q, nil, map[string]string{"X-M5755-Token": token}); qr2.Data["callbackStatus"] != "已确认" {
+		t.Fatalf("重投后应自愈为 已确认: %+v", qr2.Data)
+	}
+}
+
 func TestCallbackTimeoutRepush(t *testing.T) {
 	srv, st := setup(t)
 	rec := newReceiver()
