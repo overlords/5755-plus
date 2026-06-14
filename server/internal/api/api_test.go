@@ -262,6 +262,7 @@ func TestAccountSessionsInvalidCode(t *testing.T) {
 }
 
 func TestDevControlMaintenanceDrivesConfig(t *testing.T) {
+	skipIfProd(t)
 	srv, st := setup(t)
 	ctx := context.Background()
 	t.Cleanup(func() { _ = st.ClearInjections(ctx, seedGame) })
@@ -298,6 +299,7 @@ func TestDevControlMaintenanceDrivesConfig(t *testing.T) {
 }
 
 func TestDevControlNeedsSignature(t *testing.T) {
+	skipIfProd(t)
 	srv, _ := setup(t)
 	rb, _ := json.Marshal(map[string]string{"gameId": seedGame})
 	resp, ar := doSigned(t, srv.URL, "POST", "/internal/dev-control/reset", "", rb, 0, true, false)

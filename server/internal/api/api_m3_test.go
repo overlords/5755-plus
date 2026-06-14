@@ -121,6 +121,7 @@ func TestOrderValidation(t *testing.T) {
 }
 
 func TestOrderPaymentGate(t *testing.T) {
+	skipIfProd(t)
 	srv, st := setup(t)
 	account, token, paID := loginToSubaccount(t, srv)
 	t.Cleanup(func() { _ = st.ClearGameInjections(t.Context(), seedGame) })
@@ -181,6 +182,7 @@ func (r *callbackReceiver) count() int {
 }
 
 func TestCallbackDispatchAndIdempotentRepush(t *testing.T) {
+	skipIfProd(t)
 	srv, st := setup(t)
 	rec := newReceiver()
 	defer rec.srv.Close()
@@ -220,6 +222,7 @@ func TestCallbackDispatchAndIdempotentRepush(t *testing.T) {
 // TestRedeliverPendingCallbacksHealsFailedDelivery 验证 blocker 修复:出站投递失败的订单
 // 不靠渠道重推、由平台侧巡检重投自愈。游戏服务端先 500(投递失败)→ 恢复 → 巡检 → 已确认。
 func TestRedeliverPendingCallbacksHealsFailedDelivery(t *testing.T) {
+	skipIfProd(t)
 	srv, st := setup(t)
 	rec := newReceiver()
 	defer rec.srv.Close()
@@ -257,6 +260,7 @@ func TestRedeliverPendingCallbacksHealsFailedDelivery(t *testing.T) {
 }
 
 func TestCallbackTimeoutRepush(t *testing.T) {
+	skipIfProd(t)
 	srv, st := setup(t)
 	rec := newReceiver()
 	defer rec.srv.Close()
@@ -278,6 +282,7 @@ func TestCallbackTimeoutRepush(t *testing.T) {
 // ===== #24 故障注入 =====
 
 func TestFaultMalformedAndAutoExpire(t *testing.T) {
+	skipIfProd(t)
 	srv, _ := setup(t)
 	t.Cleanup(func() {
 		rb, _ := json.Marshal(map[string]string{"gameId": seedGame})
