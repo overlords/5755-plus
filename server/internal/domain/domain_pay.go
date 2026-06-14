@@ -101,7 +101,9 @@ func (svc *Service) BeginPayment(ctx context.Context, platformOrderID, method, p
 		// 实际 HTTP 调用微信 /v3/pay/transactions/h5 需真实商户资质(见 #60 业务前置);
 		// 此处把签名头与请求体备好,留待资质就绪后接线真实出网调用。
 		_ = body
-		_ = svc.store.SetOrderPaymentMethod(ctx, o.PlatformOrderID, "wechat")
+		if err := svc.store.SetOrderPaymentMethod(ctx, o.PlatformOrderID, "wechat"); err != nil {
+			svc.log().Warn("set_payment_method_failed", "platformOrderId", o.PlatformOrderID, "method", "wechat", "err", err.Error())
+		}
 		return nil, fault(503, result.ReasonPlatformUnavailable, "微信支付待商户资质接线")
 	case "alipay":
 		if svc.channels.Alipay == nil {
@@ -113,7 +115,9 @@ func (svc *Service) BeginPayment(ctx context.Context, platformOrderID, method, p
 		if aerr != nil {
 			return nil, fault(400, result.ReasonOrderInvalid, "支付宝预下单参数非法")
 		}
-		_ = svc.store.SetOrderPaymentMethod(ctx, o.PlatformOrderID, "alipay")
+		if err := svc.store.SetOrderPaymentMethod(ctx, o.PlatformOrderID, "alipay"); err != nil {
+			svc.log().Warn("set_payment_method_failed", "platformOrderId", o.PlatformOrderID, "method", "alipay", "err", err.Error())
+		}
 		return &PrepayResult{Kind: "url", RedirectURL: payURL}, nil
 	default:
 		return nil, fault(400, result.ReasonParamInvalid, "未知支付方式")
@@ -237,6 +241,14 @@ func (svc *Service) notifyOrderFault(ctx context.Context, channel, platformOrder
 	}
 }
 
+// releaseClaim 回滚幂等认领;回滚失败必须显式告警——否则认领行残留会让后续 notify 命中
+// "已处理"而永久漏发且无人知晓(blocker 巡检重投也只扫 已支付 订单,认领残留不在其内)。
+func (svc *Service) releaseClaim(ctx context.Context, channel, platformOrderID string) {
+	if err := svc.store.ReleasePaymentNotification(ctx, channel, platformOrderID); err != nil {
+		svc.log().Warn("notify_release_failed", "channel", channel, "platformOrderId", platformOrderID, "err", err.Error())
+	}
+}
+
 // settleChannelNotify 幂等认领 → CompletePayment(触发既有充值回调投递)。
 func (svc *Service) settleChannelNotify(ctx context.Context, channel, platformOrderID, channelTxnID string) NotifyOutcome {
 	claimErr := svc.store.ClaimPaymentNotification(ctx, channel, platformOrderID, channelTxnID)
@@ -251,12 +263,12 @@ func (svc *Service) settleChannelNotify(ctx context.Context, channel, platformOr
 	// 取 gameId(回调只带 out_trade_no=platformOrderId)。
 	o, err := svc.store.GetOrder(ctx, platformOrderID)
 	if err != nil {
-		_ = svc.store.ReleasePaymentNotification(ctx, channel, platformOrderID)
+		svc.releaseClaim(ctx, channel, platformOrderID)
 		svc.log().Warn("notify_order_read_failed_after_claim", "channel", channel, "platformOrderId", platformOrderID)
 		return NotifyOutcome{OK: false, Message: "订单读取失败"}
 	}
 	if f := svc.CompletePayment(ctx, o.GameID, platformOrderID, "成功"); f != nil {
-		_ = svc.store.ReleasePaymentNotification(ctx, channel, platformOrderID)
+		svc.releaseClaim(ctx, channel, platformOrderID)
 		svc.log().Warn("notify_complete_payment_failed", "channel", channel, "platformOrderId", platformOrderID, "reason", f.Reason)
 		return NotifyOutcome{OK: false, Message: "发放编排失败"}
 	}

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"log"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -19,6 +19,7 @@ import (
 func buildPaymentChannels(publicBaseURL string) domain.PaymentChannels {
 	base := strings.TrimRight(publicBaseURL, "/")
 	var ch domain.PaymentChannels
+	var degraded []string
 
 	wxCfg := paychannel.WechatConfig{
 		MchID:                os.Getenv("WECHAT_MCH_ID"),
@@ -31,12 +32,13 @@ func buildPaymentChannels(publicBaseURL string) domain.PaymentChannels {
 	}
 	if wxConfigured(wxCfg) {
 		if miss := wxCfg.Validate(); len(miss) > 0 {
-			log.Printf("警告:微信支付配置不完整 %v —— 微信支付不启用(收银台隐藏微信,预下单/回调 fail-closed)", miss)
+			slog.Error("pay_channel_degraded", "channel", "wechat", "reason", "配置不完整", "missing", miss)
+			degraded = append(degraded, "wechat")
 		} else if signer, err := paychannel.NewWechatSigner(wxCfg); err != nil {
-			log.Printf("警告:微信支付密钥/证书非法(%v)—— 微信支付不启用,绝不带病放行", err)
+			slog.Error("pay_channel_degraded", "channel", "wechat", "reason", "密钥/证书非法", "err", err.Error())
+			degraded = append(degraded, "wechat")
 		} else {
 			ch.Wechat = signer
-			log.Printf("微信支付渠道已启用(mchId=%s, notify=%s)", wxCfg.MchID, wxCfg.NotifyURL)
 		}
 	}
 
@@ -50,18 +52,19 @@ func buildPaymentChannels(publicBaseURL string) domain.PaymentChannels {
 	}
 	if aliConfigured(aliCfg) {
 		if miss := aliCfg.Validate(); len(miss) > 0 {
-			log.Printf("警告:支付宝配置不完整 %v —— 支付宝不启用(收银台隐藏支付宝,预下单/回调 fail-closed)", miss)
+			slog.Error("pay_channel_degraded", "channel", "alipay", "reason", "配置不完整", "missing", miss)
+			degraded = append(degraded, "alipay")
 		} else if signer, err := paychannel.NewAlipaySigner(aliCfg); err != nil {
-			log.Printf("警告:支付宝应用私钥/公钥非法(%v)—— 支付宝不启用,绝不带病放行", err)
+			slog.Error("pay_channel_degraded", "channel", "alipay", "reason", "应用私钥/公钥非法", "err", err.Error())
+			degraded = append(degraded, "alipay")
 		} else {
 			ch.Alipay = signer
-			log.Printf("支付宝渠道已启用(appId=%s, notify=%s)", aliCfg.AppID, aliCfg.NotifyURL)
 		}
 	}
 
-	if ch.Wechat == nil && ch.Alipay == nil {
-		log.Printf("提示:无任何入站支付渠道启用(微信/支付宝商户资质未就绪)——收银台将提示暂无可用支付方式,/pay/*notify fail-closed")
-	}
+	// 启动末尾结构化摘要:运维可据此告警/巡检(degraded 非空 = 有意配置但装配失败,非"完全空配")。
+	slog.Info("pay_channels_assembled",
+		"wechat", ch.Wechat != nil, "alipay", ch.Alipay != nil, "degraded", degraded)
 	return ch
 }
 
