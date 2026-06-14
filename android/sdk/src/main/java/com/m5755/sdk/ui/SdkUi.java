@@ -982,7 +982,7 @@ public final class SdkUi implements FlowUi {
         LinearLayout.LayoutParams webLp = new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1);
         webLp.topMargin = UiKit.dp(host, 10);
-        panel.addView(loadableWeb(web, paymentUrl), webLp);
+        panel.addView(loadableWeb(web, paymentUrl, true), webLp); // 收银台:支付域受限外跳例外(ADR-0014)
 
         back.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
@@ -1066,7 +1066,7 @@ public final class SdkUi implements FlowUi {
         if (userCenterUrl != null && !userCenterUrl.isEmpty()) {
             // #5:平台用户中心 H5,带 platformToken;§1.13 套加载态(占位 + 就绪淡入 + 失败重试)
             String sep = userCenterUrl.contains("?") ? "&" : "?";
-            centerView = loadableWeb(web, userCenterUrl + sep + "token=" + android.net.Uri.encode(platformToken));
+            centerView = loadableWeb(web, userCenterUrl + sep + "token=" + android.net.Uri.encode(platformToken), false);
         } else {
             // 未配置 URL:瞬时本地回退页,不套加载态(避免一闪)
             web.setWebViewClient(new android.webkit.WebViewClient() {
@@ -1205,7 +1205,7 @@ public final class SdkUi implements FlowUi {
         ws.setAllowUniversalAccessFromFileURLs(false);
         ws.setUserAgentString(ws.getUserAgentString() + " M5755Sdk/" + SDK_VERSION_UA);
         // §1.13 套加载态(占位 + 就绪淡入 + 失败重试);loadableWeb 内部 setWebViewClient + loadUrl
-        panel.addView(loadableWeb(web, url), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        panel.addView(loadableWeb(web, url, false), new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         final LinearLayout layer = panel;
         root.addView(layer, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -1225,7 +1225,7 @@ public final class SdkUi implements FlowUi {
      * setWebViewClient + loadUrl + 重试。旋转为 §1.11 为 WebView 加载态保留的品牌 spinner 例外;
      * 就绪/失败/关抽屉即停转,无固定超时。仅用于远程 loadUrl;瞬时本地 loadData(回退页)不走此辅助。
      */
-    private FrameLayout loadableWeb(final android.webkit.WebView web, final String url) {
+    private FrameLayout loadableWeb(final android.webkit.WebView web, final String url, final boolean allowPaySchemes) {
         final FrameLayout container = new FrameLayout(host);
         container.addView(web, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -1318,8 +1318,20 @@ public final class SdkUi implements FlowUi {
             public boolean shouldOverrideUrlLoading(android.webkit.WebView v, String u) {
                 if (u != null && (u.startsWith("http://") || u.startsWith("https://"))) {
                     v.loadUrl(u); // 站内加载,不外跳系统浏览器
+                    return true;
                 }
-                return true;
+                // 支付域受限外跳例外(仅收银台 allowPaySchemes、仅白名单 scheme;01 §4.2 例外 / ADR-0014):
+                // startActivity(VIEW) 直拉渠道 App,未安装 catch ANFE 泛化兜底(零 queries、不点名渠道守 07 §0.2)。
+                if (allowPaySchemes && isPaySchemeWhitelisted(u)) {
+                    try {
+                        host.startActivity(new android.content.Intent(
+                                android.content.Intent.ACTION_VIEW, android.net.Uri.parse(u)));
+                    } catch (android.content.ActivityNotFoundException e) {
+                        toast("未检测到所选支付应用,请安装后重试或换一种支付方式");
+                    }
+                    return true;
+                }
+                return true; // 白名单外的非 http scheme:吞掉(通用外跳仍禁,01 §4.2)
             }
             @Override
             public void onPageFinished(android.webkit.WebView v, String u) {
@@ -1347,6 +1359,19 @@ public final class SdkUi implements FlowUi {
         });
         web.loadUrl(url);
         return container;
+    }
+
+    /**
+     * 支付域外跳 scheme 白名单(01 §4.2 受限例外 / ADR-0014):仅微信、支付宝付款 scheme。
+     * 白名单外的非 http scheme 一律不外跳(通用外跳仍永久排除)。
+     */
+    private static boolean isPaySchemeWhitelisted(String u) {
+        if (u == null) {
+            return false;
+        }
+        return u.startsWith("weixin://")      // 微信(含 weixin://wap/pay)
+                || u.startsWith("alipays://")   // 支付宝
+                || u.startsWith("alipayqr://"); // 支付宝二维码付款变体
     }
 
     // ===== 模态构建 =====
