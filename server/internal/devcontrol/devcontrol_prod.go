@@ -18,8 +18,8 @@ func FaultMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) { c.Next() }
 }
 
-// RegisterCashierPage production 构建:注册真实平台收银台 GET /pay/:orderId(devPlaceholder 忽略)。
-// dev 占位页在生产构建不存在(探测占位页文案 404);真实收银台读订单、展示金额/商品 + 渠道选择。
-func RegisterCashierPage(r *gin.Engine, _, prodCashier gin.HandlerFunc) {
-	r.GET("/pay/:orderId", prodCashier)
+// RegisterCashierPage production 构建:恒注册真实平台收银台 GET /pay/:orderId(devPlaceholder 不入生产)。
+// 无渠道时真收银台自渲染"暂无可用支付方式";dev 占位页文案不入生产(探测 404)。hasChannels 在生产不分流。
+func RegisterCashierPage(r *gin.Engine, _, realCashier gin.HandlerFunc, _ func() bool) {
+	r.GET("/pay/:orderId", realCashier)
 }

@@ -350,9 +350,9 @@ func amountToFen(t *testing.T, yuan string) int {
 }
 
 // ---------- 收银台页 + 预下单 ----------
-// 注:收银台首页 GET /pay/:orderId 靠 build-tag 二选一(dev=占位页 / prod=真实收银台)。
-// 真实收银台页渲染的内容断言放在 production 构建(api_pay_prod_test.go);
-// 此处只测两端皆注册的 /pay/begin 与 /pay/return。
+// 收银台首页 GET /pay/:orderId 两构建皆注册真收银台(ADR-0013):dev 注入渠道(沙箱)→ 真收银台,
+// 无渠道 → dev 占位页;prod 恒真收银台(无渠道自渲染"暂无")。
+// 生产内容断言见 api_pay_prod_test.go;dev 占位降级断言见 api_pay_dev_test.go(均 build-tag 特定行为)。
 
 func TestCashierBeginAlipayReturnsURL(t *testing.T) {
 	srv, _, _, _, _ := setupWithChannels(t)
