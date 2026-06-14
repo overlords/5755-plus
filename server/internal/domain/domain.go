@@ -5,6 +5,7 @@ package domain
 import (
 	"context"
 	"crypto/rand"
+	"log/slog"
 	"math/big"
 	"net/http"
 	"regexp"
@@ -46,6 +47,7 @@ type Service struct {
 	httpClient     *http.Client
 	nppaCheckURL   string // NPPA 认证接口地址(默认线上,测试覆盖)
 	nppaQueryURL   string // NPPA 查询接口地址
+	logger         *slog.Logger // 业务日志(下单/回调链路);缺省 slog.Default()
 }
 
 // Options 注入生产/联调差异(M4-S3:密钥环境注入,不再源码常量)。
@@ -56,6 +58,7 @@ type Options struct {
 	SmsConfig      sms.Config // smsMock=false 时用于京东云发送
 	NppaCheckURL   string     // 缺省线上 NPPA 认证地址;测试覆盖
 	NppaQueryURL   string     // 缺省线上 NPPA 查询地址;测试覆盖
+	Logger         *slog.Logger // 缺省 slog.Default();测试可注入 buffer 捕获日志
 }
 
 func New(s *store.Store) *Service {
@@ -77,11 +80,31 @@ func NewWith(s *store.Store, opt Options) *Service {
 		realNameMock: opt.RealNameMock, smsMock: opt.SmsMock, smsConfig: opt.SmsConfig,
 		httpClient:   &http.Client{Timeout: 10 * time.Second},
 		nppaCheckURL: checkURL, nppaQueryURL: queryURL,
+		logger:       opt.Logger,
 	}
 }
 
 // CallbackSecret 供测试接收端验证签名。
 func (svc *Service) CallbackSecret() string { return svc.callbackSecret }
+
+// log 返回业务日志器,缺省回退全局 slog,保证旧入口/测试零改动可用。
+func (svc *Service) log() *slog.Logger {
+	if svc.logger != nil {
+		return svc.logger
+	}
+	return slog.Default()
+}
+
+// maskAccount 对账户/小号 ID 确定性脱敏:同账户恒得同脱敏串(运维仍可按串检索),中段隐藏。
+func maskAccount(a string) string {
+	if a == "" {
+		return ""
+	}
+	if len(a) <= 8 {
+		return "****"
+	}
+	return a[:4] + "****" + a[len(a)-4:]
+}
 
 // ---------- 配置 ----------
 

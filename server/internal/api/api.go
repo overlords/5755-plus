@@ -4,6 +4,7 @@ package api
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"log/slog"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -22,7 +23,7 @@ func NewRouter(svc *domain.Service, st *store.Store, now func() time.Time, baseU
 		now = time.Now
 	}
 	r := gin.New()
-	r.Use(gin.Recovery())
+	r.Use(gin.Recovery(), accessLog())
 
 	// 运维面:无签名、只读
 	r.GET("/healthz", func(c *gin.Context) { c.String(200, "m5755 platform server ok") })
@@ -47,6 +48,26 @@ func NewRouter(svc *domain.Service, st *store.Store, now func() time.Time, baseU
 	registerUCRoutes(r, svc)
 
 	return r
+}
+
+// accessLog 记录每个请求的方法/路径/状态/耗时/客户端 IP;只记路径不记 query、headers 与 body,
+// 杜绝 platformToken/密钥/验证码入访问日志。跳过 /healthz 噪声(部署/LB 高频探活)。
+func accessLog() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.Request.URL.Path == "/healthz" {
+			c.Next()
+			return
+		}
+		start := time.Now()
+		c.Next()
+		slog.Info("http_access",
+			"method", c.Request.Method,
+			"path", c.Request.URL.Path,
+			"status", c.Writer.Status(),
+			"latencyMs", time.Since(start).Milliseconds(),
+			"ip", c.ClientIP(),
+		)
+	}
 }
 
 func requestID() string {

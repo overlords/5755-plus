@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -123,8 +124,12 @@ func (svc *Service) CreateOrder(ctx context.Context, in OrderInput, baseURL stri
 		ServerID: in.ServerID, ServerName: in.ServerName, RoleID: in.RoleID, RoleName: in.RoleName, RoleLevel: in.RoleLevel,
 	})
 	if err != nil {
+		svc.log().Error("order_create_failed", "cpOrderId", in.CPOrderID,
+			"account", maskAccount(account), "gameId", in.GameID, "err", err)
 		return nil, fault(503, result.ReasonPlatformUnavailable, "订单创建失败")
 	}
+	svc.log().Info("order_created", "platformOrderId", platformOrderID, "cpOrderId", in.CPOrderID,
+		"account", maskAccount(account), "gameId", in.GameID, "amount", amount)
 	return &OrderCreateData{
 		PlatformOrderID: platformOrderID, OrderID: platformOrderID,
 		PaymentURL: baseURL + "/pay/" + platformOrderID,
@@ -172,12 +177,16 @@ func (svc *Service) CompletePayment(ctx context.Context, gameID, platformOrderID
 	}
 	if mode == "失败" {
 		_ = svc.store.UpdateOrderStatus(ctx, platformOrderID, "支付失败", "未投递")
+		svc.log().Info("payment_completed", "platformOrderId", platformOrderID,
+			"gameId", gameID, "account", maskAccount(o.Account), "result", "支付失败")
 		return nil
 	}
 	_ = svc.store.UpdateOrderStatus(ctx, platformOrderID, "已支付", "投递中")
 	callbackURL, err := svc.store.GetCallbackURL(ctx, gameID)
 	if err != nil || callbackURL == "" {
 		_ = svc.store.UpdateOrderStatus(ctx, platformOrderID, "已支付", "无回调地址")
+		svc.log().Warn("callback_skipped", "platformOrderId", platformOrderID,
+			"gameId", gameID, "reason", "无回调地址")
 		return nil
 	}
 	confirmed := svc.dispatchCallback(callbackURL, o)
@@ -190,6 +199,8 @@ func (svc *Service) CompletePayment(ctx context.Context, gameID, platformOrderID
 		status = "投递失败"
 	}
 	_ = svc.store.UpdateOrderStatus(ctx, platformOrderID, "已支付", status)
+	svc.log().Info("callback_settled", "platformOrderId", platformOrderID, "gameId", gameID,
+		"account", maskAccount(o.Account), "cpOrderId", o.CPOrderID, "callbackStatus", status, "mode", mode)
 	return nil
 }
 
@@ -202,13 +213,25 @@ func (svc *Service) dispatchCallback(url string, o *store.Order) bool {
 	}
 	payload["sign"] = callbackSign(payload, svc.callbackSecret)
 	body, _ := json.Marshal(payload)
+	host := callbackHost(url)
 	for attempt := 0; attempt < 3; attempt++ {
-		if svc.postCallback(url, body) {
+		ok := svc.postCallback(url, body)
+		svc.log().Info("callback_attempt", "platformOrderId", o.PlatformOrderID,
+			"cpOrderId", o.CPOrderID, "host", host, "attempt", attempt+1, "ok", ok)
+		if ok {
 			return true
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
 	return false
+}
+
+// callbackHost 提取回调地址的主机用于日志(不记完整 URL/查询,避免潜在参数入日志)。
+func callbackHost(raw string) string {
+	if u, err := url.Parse(raw); err == nil && u.Host != "" {
+		return u.Host
+	}
+	return "invalid"
 }
 
 func (svc *Service) postCallback(url string, body []byte) bool {
