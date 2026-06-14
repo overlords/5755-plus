@@ -248,3 +248,46 @@ func TestUserCenterChangePassword_RevokesSessions(t *testing.T) {
 		t.Fatalf("改密后旧 token 应失效 401/platform_account_invalid,得到 %d / %+v", pres.StatusCode, par)
 	}
 }
+
+// 改密后新密码必须能在网关面密码登录、错误密码被拒——锁住「uc 改密 → 密码登录」整条链路。
+// (本回归由一次诊断催生:曾疑「改密成功但新密码登录失败」;实证链路正常,补此用例防未来回退。)
+func TestUserCenterChangePassword_NewPasswordLogsIn(t *testing.T) {
+	srv, _ := setup(t)
+	phone, _, token, _ := loginNewUser(t, srv) // 验证码登录建账户,初始无密码
+
+	_, ar := ucReq(t, srv.URL, "POST", "/api/uc/v2/password/sms-codes", token, nil)
+	if !ar.Success {
+		t.Fatalf("发码应成功: %+v", ar)
+	}
+	devCode, _ := ar.Data["devCode"].(string)
+	if devCode == "" {
+		t.Fatalf("mock 模式应返回 devCode: %+v", ar.Data)
+	}
+
+	const newPassword = "NewPass456"
+	res, ar2 := ucReq(t, srv.URL, "PUT", "/api/uc/v2/password", token, map[string]string{"smsCode": devCode, "newPassword": newPassword})
+	if res.StatusCode != 200 || !ar2.Success {
+		t.Fatalf("改密应 200/success,得到 %d / %+v", res.StatusCode, ar2)
+	}
+
+	// 关键断言:新密码能在网关面密码登录(证明改密真写入、且登录读取的是同一行)。
+	lb, _ := json.Marshal(map[string]string{
+		"gameId": seedGame, "loginMethod": "password", "loginAccount": phone, "credential": newPassword,
+	})
+	lres, lar := doSigned(t, srv.URL, "POST", "/api/sdk/v2/account-sessions", "", lb, 0, false, false)
+	if lres.StatusCode != 200 || !lar.Success {
+		t.Fatalf("新密码应能密码登录,得到 %d / %+v", lres.StatusCode, lar)
+	}
+	if tok, _ := lar.Data["platformToken"].(string); tok == "" {
+		t.Fatalf("新密码登录应签发 platformToken: %+v", lar.Data)
+	}
+
+	// 反向:错误密码必须被拒(credential_invalid),防「改密后任意密码放行」回退。
+	ob, _ := json.Marshal(map[string]string{
+		"gameId": seedGame, "loginMethod": "password", "loginAccount": phone, "credential": "WrongPass789",
+	})
+	ores, oar := doSigned(t, srv.URL, "POST", "/api/sdk/v2/account-sessions", "", ob, 0, false, false)
+	if ores.StatusCode == 200 || oar.Success || oar.Reason != "credential_invalid" {
+		t.Fatalf("错误密码应被拒(credential_invalid),得到 %d / %+v", ores.StatusCode, oar)
+	}
+}

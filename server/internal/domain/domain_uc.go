@@ -193,8 +193,8 @@ func (svc *Service) UCChangePassword(ctx context.Context, token, smsCode, newPas
 	if f != nil {
 		return f
 	}
-	if len(newPassword) < 6 || len(newPassword) > 64 {
-		return fault(400, result.ReasonParamInvalid, "密码长度须 6-64")
+	if len(newPassword) < 8 || len(newPassword) > 32 {
+		return fault(400, result.ReasonParamInvalid, "密码长度须 8-32 位")
 	}
 	acc, err := svc.store.GetPlatformAccount(ctx, paID)
 	if err != nil {

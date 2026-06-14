@@ -4,6 +4,7 @@
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const app = $('#app');
+let profile = null; // 主账户 profile 缓存(renderHome 填充);改密/换绑二级页据此明示「正在操作哪个号」,防账号错位
 
 // ---------- 通用 ----------
 function toast(msg) {
@@ -16,6 +17,13 @@ function toast(msg) {
 }
 
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+// 失败 toast 文案:登录失效→「登录已失效」;后端中文业务错误(如「验证码错误」「密码长度须 8-32 位」)原样显示;其余(网络等)→ fallback。
+function failMsg(e, fallback) {
+  if (e && e.message === 'session_invalid') return '登录已失效';
+  const m = e && e.message;
+  return m && /[一-鿿]/.test(m) ? m : fallback;
+}
 
 // 验证码 60s 倒计时(口径同 07 §3)
 function bindCountdown(btn, onSend) {
@@ -42,6 +50,12 @@ function subhead(title) {
   </div>`;
 }
 
+// 当前主账户脱敏手机:改密/换绑前明示正在操作哪个号(防账号错位)。优先主页 profile 缓存,深链无缓存则补调。
+async function currentMaskedPhone() {
+  if (!profile) { try { profile = await UC.getProfile(); } catch (e) { return ''; } }
+  return profile.maskedPhone || '';
+}
+
 // ---------- 主页 ----------
 async function renderHome() {
   app.innerHTML = `<button class="uc-close" aria-label="关闭用户中心" onclick="UC.bridge && window.close && window.close()">×</button>
@@ -56,7 +70,7 @@ async function renderHome() {
     </div>`;
 
   let p;
-  try { p = await UC.getProfile(); }
+  try { p = await UC.getProfile(); profile = p; }
   catch (e) {
     app.querySelector('.view').innerHTML = errorBlock(renderHome);
     return;
@@ -129,7 +143,9 @@ function errorBlock(retryFn) {
 
 // ---------- 换绑手机 ----------
 function renderPhone() {
+  const m0 = profile ? profile.maskedPhone : '';
   app.innerHTML = subhead('换绑手机') + `<div class="form">
+    <div class="form-acct" id="acctHint">${m0 ? '正在为 <b>' + esc(m0) + '</b> 换绑手机' : ''}</div>
     <div class="form-hint">输入新的手机号并完成短信验证后,绑定手机将更新。</div>
     <div class="field"><input class="input" id="newPhone" type="tel" maxlength="11" placeholder="请输入新手机号"></div>
     <div class="field"><div class="input-row">
@@ -138,19 +154,20 @@ function renderPhone() {
     </div></div>
     <button class="btn btn-primary" id="phoneSubmit">确认换绑</button>
   </div>`;
+  if (!m0) currentMaskedPhone().then((m) => { const el = $('#acctHint'); if (el && m) el.innerHTML = '正在为 <b>' + esc(m) + '</b> 换绑手机'; });
 
   const phone = $('#newPhone');
   bindCountdown($('#phoneSms'), async () => {
     if (!/^1\d{10}$/.test(phone.value)) { toast('请输入正确的 11 位手机号'); throw new Error('bad'); }
-    await UC.sendPhoneSms(phone.value);
-    toast('验证码已发送');
+    const d = await UC.sendPhoneSms(phone.value);
+    toast(d && d.devCode ? '调试验证码:' + d.devCode : '验证码已发送'); // 与 SDK 登录窗同口径(SdkUi);生产无 devCode 字段退回「验证码已发送」
   });
   $('#phoneSubmit').addEventListener('click', async () => {
     if (!/^1\d{10}$/.test(phone.value)) return toast('请输入正确的 11 位手机号');
     const code = $('#phoneCode').value.trim();
     if (!code) return toast('请输入验证码');
     try { await UC.rebindPhone(phone.value, code); }
-    catch (e) { return toast(e.message === 'session_invalid' ? '登录已失效' : '换绑失败'); }
+    catch (e) { return toast(failMsg(e, '换绑失败')); }
     sessionStorage.setItem('uc_flash', '换绑成功');
     history.back();
   });
@@ -158,7 +175,9 @@ function renderPhone() {
 
 // ---------- 修改密码 ----------
 function renderPassword() {
+  const m0 = profile ? profile.maskedPhone : '';
   app.innerHTML = subhead('修改密码') + `<div class="form">
+    <div class="form-acct" id="acctHint">${m0 ? '正在为 <b>' + esc(m0) + '</b> 修改密码' : ''}</div>
     <div class="form-hint">通过绑定手机的短信验证身份后设置新密码。修改成功需重新登录。</div>
     <div class="field"><div class="input-row">
       <input class="input" id="pwCode" placeholder="请输入验证码">
@@ -167,15 +186,16 @@ function renderPassword() {
     <div class="field"><input class="input" id="pwNew" type="password" placeholder="请输入新密码"></div>
     <button class="btn btn-primary" id="pwSubmit">确认修改</button>
   </div>`;
+  if (!m0) currentMaskedPhone().then((m) => { const el = $('#acctHint'); if (el && m) el.innerHTML = '正在为 <b>' + esc(m) + '</b> 修改密码'; });
 
-  bindCountdown($('#pwSms'), async () => { await UC.sendPasswordSms(); toast('验证码已发送'); });
+  bindCountdown($('#pwSms'), async () => { const d = await UC.sendPasswordSms(); toast(d && d.devCode ? '调试验证码:' + d.devCode : '验证码已发送'); }); // 与 SDK 登录窗同口径(SdkUi)
   $('#pwSubmit').addEventListener('click', async () => {
     const code = $('#pwCode').value.trim();
     const pw = $('#pwNew').value;
     if (!code) return toast('请输入验证码');
-    if (!pw || pw.length < 6) return toast('新密码至少 6 位');
+    if (!pw || pw.length < 8 || pw.length > 32) return toast('密码长度须 8-32 位');
     try { await UC.changePassword(code, pw); }
-    catch (e) { return toast(e.message === 'session_invalid' ? '登录已失效' : '修改失败'); }
+    catch (e) { return toast(failMsg(e, '修改失败')); }
     toast('密码已修改');
     // 改密 → platformToken 作废 → 强制重登(06a §3)
     setTimeout(() => UC.bridge.sessionInvalid(), 800);
