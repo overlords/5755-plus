@@ -22,7 +22,7 @@ function classifyResponse(status, json) {
   if (status === 401) {
     return { invalid: true, error: 'session_invalid', data: null };
   }
-  if (json && json.ok === false) {
+  if (json && json.success === false) {
     return {
       invalid: json.reason === 'platform_account_invalid',
       error: json.message || json.reason || 'request_failed',
