@@ -43,6 +43,9 @@ func NewRouter(svc *domain.Service, st *store.Store, now func() time.Time, baseU
 	// dev 控制面:dev build 注册并复用验签;production build 为 no-op(路由不存在)
 	devcontrol.Register(r, st, svc, mw)
 
+	// 用户中心面 /api/uc/v2(ADR-0010):platformToken Bearer + CORS,**不走 HMAC**;与网关面并列。
+	registerUCRoutes(r, svc)
+
 	return r
 }
 

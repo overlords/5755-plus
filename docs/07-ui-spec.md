@@ -170,7 +170,7 @@ smallText 行距 +2dp;hint 行距 +3dp。粗体使用 `Typeface.DEFAULT` + `Type
 ### 1.11 字体与动效边界(2026-06-12 决定)
 
 - **字体**:Android 原生层使用**系统默认字体**(`Typeface.DEFAULT`),字重仅 regular/bold 两档;**不随 AAR 内嵌任何字体文件**(中文字体体积与最小化 AAR 原则冲突)。设计系统的品牌字体 HarmonyOS Sans SC 仅约束设计产物与未来用户中心 H5 页面,不约束 Android 原生层。
-- **动效**:界面出现/消失无进出场动画(与旧实现一致);允许新增轻微淡入淡出,**禁止**弹跳、循环、装饰性动效。计时行为仅限:验证码 60s 倒计时、toast 1600ms、自动进入提示 1800ms。
+- **动效**:界面出现/消失无进出场动画(与旧实现一致);允许新增轻微淡入淡出(含 **WebView 就绪淡入**,§1.13)。**禁止**弹跳、装饰性动效与循环动效——**唯一例外**:WebView 加载态的品牌 spinner(轨道环匀速旋转,1.8s/圈,§1.13;2026-06-13 反转早先「加载态用静态占位、不用 spinner」的口径,理由见 §1.13 与 ADR-0011)。计时行为仅限:验证码 60s 倒计时、toast 1600ms、自动进入提示 1800ms。
 - 按压态 = 底色变暗(不缩放);禁用态 = 去饱和金色或灰色文字。
 
 ### 1.12 屏幕方向适配(自设计系统并入 2026-06-12;2026-06-13 收口为「开屏即定」,见 ADR-0009)
@@ -193,6 +193,19 @@ smallText 行距 +2dp;hint 行距 +3dp。粗体使用 `Typeface.DEFAULT` + `Type
 
 ---
 
+### 1.13 WebView 加载态(2026-06-13 决定;同日两次修订:① 占位由纯文字改为品牌图;② 品牌图改为轨道旋转动效)
+
+两个远程 WebView(用户中心 §11.2、协议网页层 §2)加载远程页时,在页面首次绘制前(**A 层**:网络拉取 + 初次渲染,纯白屏)以**品牌动效占位**覆盖,页面就绪后**淡入**揭示。
+
+> **口径反转记**:本节初版要求加载态用**静态占位、不用 spinner**(承 §1.11「无循环动效」极简基线)。2026-06-13 经评审,为强化品牌感,反转为**轨道环旋转的品牌 spinner**(见 ADR-0011)——这是 §1.11 唯一保留的循环动效例外,仅限 WebView 加载态;其余界面仍守「无循环/装饰动效」。
+
+- **占位(加载中态)**:`WEAK` 中性底铺满 WebView 区;居中放 **5755 品牌动效徽标**(Gold Orbit,160dp 宽、3:2 比例)——**金色轨道环 + 光点绕中心 (120,67) 匀速旋转**(1.8s/圈、线性、无限循环),斜体「5755」与三个金点**静止**。就绪/失败/关抽屉**即停转**。**无文字提示**(徽标即占位;文字交由 SPA 骨架屏 B 层接力)。
+- **图为透明底**(去掉源图的白卡/阴影/描边),直接浮于 `WEAK` 占位底——避免在 WebView 默认底色上叠出突兀白块。
+- **资产(分层两张,皆透明底 3x)**:`res/drawable-nodpi/m5755_web_loading_orbit.png`(旋转层:轨道环 + 光点)叠 `m5755_web_loading_brand.png`(静止层:「5755」+ 三点);旋转层 `ImageView` 以 `pivot=(0.5w, 67/160·h)` 绕轨道中心旋转。两图由设计系统「5755 Gold Orbit」动效 SVG **去动画 + 去白卡 + 去「加载中」文字后按图层拆分**栅格化派生(源 SVG 不入库)。品牌字以**位图像素**呈现而非字体文件,不与 §1.11「原生层不内嵌字体」冲突。
+- **就绪淡入**:`onPageFinished` 时把 WebView 从 `alpha 0` 淡入到 `1`(~200ms,§1.11 允许的「轻微淡入」),同时移除占位。SPA 此刻已绘自身骨架屏(**B 层**由远程页负责,见 06a §85),三层交接顺滑。
+- **失败态**:`onReceivedError`(网络/证书/连接失败等)→ **隐藏品牌图**,原地显 `加载失败` 文案(`MUTED`)+ `重试` 按钮(`PRIMARY_DEEP`);点重试回加载中态(品牌图重现)并重新 `loadUrl`。**无固定加载超时**(靠 `onReceivedError` 接住绝大多数失败,不新增 §1.11 计时行为)。
+- **仅远程 `loadUrl` 显占位**:用户中心未配置 URL 时走 `loadDataWithBaseURL` 回退页(瞬时本地加载),**不显占位**(避免一闪)。
+
 ## 2. 协议告知页(showProtocol)
 
 截图:`assets/acceptance/01_protocol.png`
@@ -211,6 +224,7 @@ smallText 行距 +2dp;hint 行距 +3dp。粗体使用 `Typeface.DEFAULT` + `Type
   - `WebViewClient` 拦截 http/https **站内加载,不跳系统浏览器**;
   - UserAgent 追加 `M5755Sdk/<版本>`(供后端/H5 识别 SDK 与版本);
   - 地址 `https://p.xingninghuyu.com/agreement/{register,privacy,children,third-party}`(平台静态协议页;与用户中心动态 H5 分域)。
+  - **加载态见 §1.13**(品牌动效占位 + 就绪淡入 + 失败重试)。
 
 ---
 
@@ -403,7 +417,7 @@ smallText 行距 +2dp;hint 行距 +3dp。粗体使用 `Typeface.DEFAULT` + `Type
 
 - **容器**:左侧全高抽屉(`Gravity.LEFT`),宽 `min(屏宽, max(520dp, 屏宽×0.58))`,底色 `DRAWER_BG #F5F6F8`,elevation 12;层非模态(右侧游戏区域可操作)。**竖屏下宽度上限 80% 屏宽(§1.12)**——任何方向都必须保留右侧游戏可见条,不得全屏遮挡。
 - **关闭按钮**:`×` 26sp、色 `#747880`,44×44dp,抽屉右上角(距顶 6dp、距右 8dp)→ `onClosed("user_center")` + 关闭层(含悬浮球;游戏侧可再调 showFloatBall)。
-- **WebView**(铺满抽屉):系统 WebView;`javaScriptEnabled=true`、`javaScriptCanOpenWindowsAutomatically=false`、文件访问全关;`overScrollMode=NEVER`;**UserAgent 追加 `M5755Sdk/<版本>`**;`WebViewClient` 拦截 http/https **站内加载不外跳**;JS 桥名 **`UserCenter`**。
+- **WebView**(铺满抽屉):系统 WebView;`javaScriptEnabled=true`、`javaScriptCanOpenWindowsAutomatically=false`、文件访问全关;`overScrollMode=NEVER`;**UserAgent 追加 `M5755Sdk/<版本>`**;`WebViewClient` 拦截 http/https **站内加载不外跳**;JS 桥名 **`UserCenter`**;**加载态见 §1.13**(远程页品牌动效占位 + 就绪淡入 + 失败重试;回退页瞬时不显占位)。
 - **加载源(#5,见 06 §3/§5)**:用户中心 = **平台真实 H5**,以**主账户为核心**;加载 `userCenterUrl`(经 `GET /config` 下发)并以查询参数带 `platformToken`(`?token=…` / 已含 query 则 `&`)供平台页拉取主账户内容。`userCenterUrl` 由平台配置(`games.user_center_url`),**不进静态协议域**,SDK 不硬编码。
   - **未配置 URL 时**:最小回退本地容器(`loadDataWithBaseURL(null,…)`,空 baseURL),仅 `切换小号` / `退出登录` 两功能行 + 说明,**不展示游戏小号**。
 - **JS 桥协议(#5)**:仅 **`UserCenter.postAccountAction(action)`**——白名单归一:仅接受 `logout` / `switch_account` / `session_invalid`,其余归一 `unknown`;UI 线程回调 `onUserCenterAction(action)`。**已移除 `getAccountContext`**(平台 H5 凭 `platformToken` 自取主账户,SDK 不经 bridge 下发任何账户上下文)。

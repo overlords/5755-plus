@@ -188,4 +188,32 @@ final class TestHarness {
         Context ctx = InstrumentationRegistry.getInstrumentation().getTargetContext();
         return ctx.getSharedPreferences("m5755_operate_min", Context.MODE_PRIVATE).getString(key, null);
     }
+
+    /** 在 WebView(用户中心/协议页)内点含某文字的元素;避开被遮罩盖住的主屏同名控件。 */
+    void tapInWebView(String textContains) {
+        UiObject2 web = device.wait(Until.findObject(By.clazz("android.webkit.WebView")), WAIT);
+        assertNotNull("应有 WebView 容器", web);
+        UiObject2 el = web.findObject(By.textContains(textContains));
+        assertNotNull("WebView 内找不到: " + textContains, el);
+        el.click();
+    }
+
+    // ===== 网络开关(#51 WebView 加载态错误路径:断网触发 onReceivedError) =====
+
+    /** 切换设备网络(executeShellCommand 切 wifi+data),并等状态落定。复网比断网慢,故等久些。 */
+    void setNetwork(boolean enabled) throws Exception {
+        String s = enabled ? "enable" : "disable";
+        shell("svc wifi " + s);
+        shell("svc data " + s);
+        Thread.sleep(enabled ? 6000 : 2500);
+    }
+
+    private void shell(String cmd) throws Exception {
+        android.os.ParcelFileDescriptor pfd =
+                InstrumentationRegistry.getInstrumentation().getUiAutomation().executeShellCommand(cmd);
+        java.io.FileInputStream in = new java.io.FileInputStream(pfd.getFileDescriptor());
+        byte[] buf = new byte[256];
+        while (in.read(buf) != -1) { /* drain 至命令结束 */ }
+        in.close();
+    }
 }

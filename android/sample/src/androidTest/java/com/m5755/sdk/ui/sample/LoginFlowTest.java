@@ -71,7 +71,8 @@ public class LoginFlowTest {
         h.tapExact("提交");
         assertTrue(h.hasText("选择小号进入游戏", TestHarness.WAIT));
         h.tapExact("默认"); // 显式设默认(默认标签,非小号行;tip 文案含「默认」须精确匹配)
-        assertTrue("设默认后应出现勾选态", h.hasText("✓ 默认", TestHarness.WAIT));
+        // #4 重做后徽标 = 独立 radio「✓」+ label「默认」两个 TextView;选中态断言 ✓ 勾选出现
+        assertTrue("设默认后应出现勾选态(✓)", h.hasText("✓", TestHarness.WAIT));
         h.tapExact("小号1");
         assertTrue(h.hasText("登录态校验通过", TestHarness.WAIT));
         h.tapExact("进入游戏");

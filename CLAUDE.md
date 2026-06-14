@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 仓库性质
 
-本仓库是 5755 SDK v2 的**文档 + SDK + 平台服务端同仓**项目:`docs/` 下是 8 份权威需求/规格/验收文档与 UI 资产;Android SDK(Gradle 工程,从零重写)与平台服务端(从零重构,v2 只含 SDK 网关面)都在本仓库内开发,以 04 契约为两端共同口径(尚未脚手架时仓库暂为纯文档状态)。参考实现:旧 SDK 在 `~/Developer/m5755`(纯 Java,带 B2-B5 缺口),旧平台原型在 `~/Developer/U10`(Node/TS,现行 dev 部署的承载者);两者都**只作阅读参考,不搬运**(见 `docs/adr/`)。新实现以本文档集为唯一口径。
+本仓库是 5755 SDK v2 的**文档 + SDK + 平台服务端同仓**项目:`docs/` 下是 8 份权威需求/规格/验收文档与 UI 资产;Android SDK(Gradle 工程,从零重写)与平台服务端(从零重构,以 SDK 网关面 `/api/sdk/v2` 起步,并含用户中心「平台对玩家」面 `/api/uc/v2`,见 ADR-0010)都在本仓库内开发,以 04 契约为两端共同口径(尚未脚手架时仓库暂为纯文档状态)。参考实现:旧 SDK 在 `~/Developer/m5755`(纯 Java,带 B2-B5 缺口),旧平台原型在 `~/Developer/U10`(Node/TS,现行 dev 部署的承载者);两者都**只作阅读参考,不搬运**(见 `docs/adr/`)。新实现以本文档集为唯一口径。
 
 所有文档使用简体中文撰写;术语、字段名、API 名保留原文(如 `account`、`Order`、`devCode`)。
 
@@ -18,7 +18,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `docs/03-entry-account-flow.md` — 主流程状态顺序、各节点阻断/回退规则(含"是否触发账号变化"判定表)、游戏小号体系、登出语义。
 - `docs/04-platform-gateway-api.md` — SDK 内部网关与平台服务端的 HTTP JSON 契约 v2:9 条资源式路径(HTTP 方法区分语义)、`ApiResult` + 机器可读 `reason` 枚举(失效分流的唯一依据)、HMAC-SHA256 入站签名、dev 控制面(`/internal/dev-control/*`,异常注入)、充值回调(服务端)、环境矩阵;**这是 SDK 与平台服务端两端的共同验收口径**。
 - `docs/05-payment-role-report.md` — 角色上报、支付流程与 `Order` 语义、客户端支付回调 vs 充值回调责任矩阵。
-- `docs/06-user-center.md` — 悬浮球入口、H5 容器安全边界、JS Bridge 最小契约(仅 `getAccountContext` / `postAccountAction` 两个方法)。
+- `docs/06-user-center.md` — 悬浮球入口、H5 容器安全边界、JS Bridge 最小契约(**仅 `postAccountAction` 一个方法**;`getAccountContext` 已移除)。
+- `docs/06a-user-center-h5-page.md` — 用户中心 H5 页面(平台远程页 uc SPA)自身的信息架构、导航、`/api/uc/v2` 数据 API 清单、主页/二级页布局与禁词自检;06 管容器/bridge,06a 管被加载的远程页本身。
 - `docs/07-ui-spec.md` — 12 个界面的布局/文案/颜色/尺寸规格与通用规范。**视觉上游**是 claude.ai 设计系统项目「5755 SDK Design System」(经 DesignSync 工具读取,仓库不存快照);设计产出进实现必须先修订 07,07 仍是实现唯一口径;Android 不内嵌字体(07 §1.11)。
 - `docs/08-acceptance.md` — 验收三面(样例演示 + 诊断快照 + 上线阻断回归)、12 个模拟器验收场景、旧实现已知缺口 B2-B5。
 
@@ -36,7 +37,7 @@ scripts/     # 跨端脚本:部署 sdk-dev、发布门禁探测等
 .scratch/    # 本地工作区,不入库
 ```
 
-`server/` 内部:`cmd/server/` 入口 + `internal/{api,signature,devcontrol,domain,store}`,贴 04 契约三个面切包;`devcontrol` 用 Go build tag 实现"生产构建不注册路由"(04 三重生产防护①)。顶层不叫 `sdk/`(避免与 Gradle 模块 `:sdk` 形成 `sdk/sdk/` 路径),服务端目录不叫 `gateway`(术语表禁用)。
+`server/` 内部:`cmd/server/` 入口 + `internal/{api,signature,devcontrol,domain,store}`,贴 04 契约三个面切包;`devcontrol` 用 Go build tag 实现"生产构建不注册路由"(04 三重生产防护①)。用户中心「平台对玩家」面 `/api/uc/v2`(ADR-0010/06a)与网关面 `/api/sdk/v2` **并列但鉴权不同**(Bearer vs HMAC),在 `internal/api` 下区隔、走独立中间件,**不复用网关面验签**。顶层不叫 `sdk/`(避免与 Gradle 模块 `:sdk` 形成 `sdk/sdk/` 路径),服务端目录不叫 `gateway`(术语表禁用)。
 
 ## 贯穿全部文档的核心不变量
 
