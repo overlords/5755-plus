@@ -47,6 +47,7 @@
 - `com.m5755.operate.api.Order`
 - `com.m5755.operate.api.Listener`
 - `com.m5755.operate.api.DataListener`
+- `com.m5755.operate.api.OnQuitGameListener`(`shouldQuitGame` 的回调参数类型)
 - `com.m5755.operate.provider.OperateCode`
 
 | API 面 | 保留项 |
