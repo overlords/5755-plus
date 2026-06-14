@@ -28,8 +28,12 @@ func NewRouter(svc *domain.Service, st *store.Store, now func() time.Time, baseU
 	// 运维面:无签名、只读
 	r.GET("/healthz", func(c *gin.Context) { c.String(200, "m5755 platform server ok") })
 	r.GET("/openapi.json", openAPIHandler)
-	// dev 占位支付台页面(无签名;production 构建不注册 → 404,M4-S3)
-	devcontrol.RegisterPayPlaceholder(r, payPlaceholderHandler(svc))
+
+	// #60 入站支付链路(不走 HMAC、不在 /internal、生产构建注册):
+	// 收银台首页 GET /pay/:orderId 靠 build-tag 二选一(dev=占位页 / prod=真实收银台);
+	// 收银台交互 API / return sentinel / 渠道回调接收端两端皆注册。
+	devcontrol.RegisterCashierPage(r, payPlaceholderHandler(svc), CashierPageHandler(svc))
+	registerPayRoutes(r, svc)
 
 	mw := signature.Middleware(st.LookupSigningKey, now)
 

@@ -18,5 +18,8 @@ func FaultMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) { c.Next() }
 }
 
-// RegisterPayPlaceholder 生产构建 no-op:占位支付台路由不存在(探测 404)。
-func RegisterPayPlaceholder(_ *gin.Engine, _ gin.HandlerFunc) {}
+// RegisterCashierPage production 构建:注册真实平台收银台 GET /pay/:orderId(devPlaceholder 忽略)。
+// dev 占位页在生产构建不存在(探测占位页文案 404);真实收银台读订单、展示金额/商品 + 渠道选择。
+func RegisterCashierPage(r *gin.Engine, _, prodCashier gin.HandlerFunc) {
+	r.GET("/pay/:orderId", prodCashier)
+}

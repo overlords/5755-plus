@@ -49,6 +49,9 @@ func main() {
 	opt := bootstrapEnv(ctx, st, platformEnv)
 
 	baseURL := envOrDefault("PUBLIC_BASE_URL", "https://sdk-dev.xingninghuyu.com")
+	// #60 入站支付渠道(微信/支付宝):env 注入、fail-closed、绝不入码;
+	// notify/return URL 与 paymentUrl 同源(baseURL)。未配置渠道留 nil,请求时 503。
+	opt.Channels = buildPaymentChannels(baseURL)
 	svc := domain.NewWith(st, opt)
 	r := api.NewRouter(svc, st, time.Now, baseURL)
 

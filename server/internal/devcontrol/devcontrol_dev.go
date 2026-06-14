@@ -105,9 +105,12 @@ func peekBodyGameID(c *gin.Context) string {
 	return probe.GameID
 }
 
-// RegisterPayPlaceholder dev 构建注册占位支付台页(生产构建 no-op → 404,M4-S3)。
-func RegisterPayPlaceholder(r *gin.Engine, handler gin.HandlerFunc) {
-	r.GET("/pay/:orderId", handler)
+// RegisterCashierPage 注册收银台首页路由 GET /pay/:orderId。
+// dev 构建:注册 dev 占位支付台页(无真实资金渠道);prodCashier 忽略。
+// production 构建(见 devcontrol_prod.go):注册真实收银台 prodCashier。
+// 两者共享同一 path,靠 build-tag 二选一注册,避免 gin 重复路由 panic。
+func RegisterCashierPage(r *gin.Engine, devPlaceholder, _ gin.HandlerFunc) {
+	r.GET("/pay/:orderId", devPlaceholder)
 }
 
 // Register 在 dev/local 构建下注册 /internal/dev-control/*,复用验签中间件。
