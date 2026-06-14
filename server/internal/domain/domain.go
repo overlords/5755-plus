@@ -48,6 +48,7 @@ type Service struct {
 	nppaCheckURL   string // NPPA 认证接口地址(默认线上,测试覆盖)
 	nppaQueryURL   string // NPPA 查询接口地址
 	logger         *slog.Logger // 业务日志(下单/回调链路);缺省 slog.Default()
+	channels       PaymentChannels // #60 微信/支付宝渠道签名器;nil 渠道 = 未配置(预下单/验签 fail-closed)
 }
 
 // Options 注入生产/联调差异(M4-S3:密钥环境注入,不再源码常量)。
@@ -59,6 +60,7 @@ type Options struct {
 	NppaCheckURL   string     // 缺省线上 NPPA 认证地址;测试覆盖
 	NppaQueryURL   string     // 缺省线上 NPPA 查询地址;测试覆盖
 	Logger         *slog.Logger // 缺省 slog.Default();测试可注入 buffer 捕获日志
+	Channels       PaymentChannels // #60 微信/支付宝渠道签名器;由 bootstrap 从 env 构造(未配置 = nil 渠道)
 }
 
 func New(s *store.Store) *Service {
@@ -81,6 +83,7 @@ func NewWith(s *store.Store, opt Options) *Service {
 		httpClient:   &http.Client{Timeout: 10 * time.Second},
 		nppaCheckURL: checkURL, nppaQueryURL: queryURL,
 		logger:       opt.Logger,
+		channels:     opt.Channels,
 	}
 }
 

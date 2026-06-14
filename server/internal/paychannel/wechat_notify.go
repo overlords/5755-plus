@@ -33,6 +33,18 @@ type WechatTransaction struct {
 	} `json:"amount"`
 }
 
+// ParseWechatEnvelope 解析微信回调外层信封(JSON)。验签应在调用前完成。
+func ParseWechatEnvelope(rawBody []byte) (*WechatNotifyEnvelope, error) {
+	var env WechatNotifyEnvelope
+	if err := json.Unmarshal(rawBody, &env); err != nil {
+		return nil, fmt.Errorf("微信回调信封解析失败: %w", err)
+	}
+	if env.Resource.Ciphertext == "" {
+		return nil, errors.New("微信回调信封缺少 resource.ciphertext")
+	}
+	return &env, nil
+}
+
 // DecryptNotifyResource 用 APIv3 密钥(AES-256-GCM)解密回调 resource 密文。
 // associatedData 与 nonce 来自信封;APIv3Key 必须为 32 字节。
 func (s *WechatSigner) DecryptNotifyResource(env *WechatNotifyEnvelope) (*WechatTransaction, error) {
