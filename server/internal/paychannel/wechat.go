@@ -201,9 +201,15 @@ func (s *WechatSigner) PrepayH5(in WechatPrepayInput) (string, error) {
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if resp.StatusCode != 200 {
-		return "", fmt.Errorf("微信预下单 http=%d", resp.StatusCode)
+		// 并入微信错误体({"code","message"})便于生产排障;截断防超长(错误体不含密钥)。
+		errBody := string(respBody)
+		if len(errBody) > 256 {
+			errBody = errBody[:256]
+		}
+		return "", fmt.Errorf("微信预下单 http=%d body=%s", resp.StatusCode, errBody)
 	}
-	// 验响应签名(平台证书公钥;未配置公钥则跳过——生产 Validate 要求必配)
+	// 验响应签名(平台证书公钥;未配置公钥则跳过——生产 Validate 要求必配)。
+	// 验签失败时把 Wechatpay-Serial 并入 error,便于在 domain 日志定位平台证书轮换不同步。
 	if s.publicKey != nil {
 		if err := s.VerifyNotifySignature(
 			resp.Header.Get("Wechatpay-Timestamp"),
@@ -211,7 +217,7 @@ func (s *WechatSigner) PrepayH5(in WechatPrepayInput) (string, error) {
 			string(respBody),
 			resp.Header.Get("Wechatpay-Signature"),
 		); err != nil {
-			return "", fmt.Errorf("微信预下单响应验签失败: %w", err)
+			return "", fmt.Errorf("微信预下单响应验签失败(serial=%s): %w", resp.Header.Get("Wechatpay-Serial"), err)
 		}
 	}
 	var parsed struct {

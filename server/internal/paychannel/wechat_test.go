@@ -212,4 +212,24 @@ func TestWechatPrepayH5OutCall(t *testing.T) {
 	if _, err := s2.PrepayH5(WechatPrepayInput{OutTradeNo: "P5755y", Description: "x", TotalFen: 100, PayerIP: "1.2.3.4"}); err == nil {
 		t.Fatal("响应验签失败应拒绝")
 	}
+
+	// 合法签名但 body 被掉包(签名对应另一内容)→ 内容完整性校验应拒(防 MITM 用合法签名配 evil h5_url)。
+	tampered := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		signedBody := `{"h5_url":"https://wx.tenpay.com/legit"}` // 真正被签名的内容
+		ts := strconv.FormatInt(time.Now().Unix(), 10)
+		nonce := "tampnonce1234567"
+		sum := sha256.Sum256([]byte(ts + "\n" + nonce + "\n" + signedBody + "\n"))
+		raw, _ := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, sum[:])
+		w.Header().Set("Wechatpay-Timestamp", ts)
+		w.Header().Set("Wechatpay-Nonce", nonce)
+		w.Header().Set("Wechatpay-Signature", base64.StdEncoding.EncodeToString(raw))
+		w.Header().Set("Wechatpay-Serial", "ROTATED999")      // 顺带验 serial 进 error 不致命
+		_, _ = w.Write([]byte(`{"h5_url":"https://evil/x"}`)) // 实发被掉包的 body
+	}))
+	defer tampered.Close()
+	cfg.Gateway = tampered.URL
+	s3, _ := NewWechatSigner(cfg)
+	if _, err := s3.PrepayH5(WechatPrepayInput{OutTradeNo: "P5755z", Description: "x", TotalFen: 100, PayerIP: "1.2.3.4"}); err == nil {
+		t.Fatal("合法签名 + 篡改 body 应验签失败被拒")
+	}
 }
