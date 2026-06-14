@@ -911,9 +911,9 @@ public final class SdkUi implements FlowUi {
     /**
      * 平台收银台(生产支付,07 §9):订单确认后交接,在 SDK 自有支付容器内以远程 WebView 加载平台
      * 收银台 H5(下单返回的 paymentUrl),套 §1.13 品牌加载态(占位 / 就绪淡入 / 失败重试)。玩家在
-     * 收银台内选择支付方式并付款。边界:loadableWeb 的 shouldOverrideUrlLoading 仅站内 http(s)、不外
-     * 跳;拉起第三方支付渠道 App 的 scheme 外跳属 01 §5 受限例外(#61),未授予前不接线——收银台可
-     * 展示,渠道 App 拉起待例外 + 业务资质。原生层只出现「5755 游戏支付」,不含 07 §0.2 禁词。
+     * 收银台内选择支付方式并付款。loadableWeb 传 allowPaySchemes=true:http(s) 站内加载,微信/支付宝
+     * 白名单 scheme 经 startActivity(VIEW) 外跳拉起渠道 App(支付域受限外跳例外,已评审通过,ADR-0014 /
+     * 01 §4.2;未安装泛化兜底、零 queries)。原生层只出现「5755 游戏支付」,不含 07 §0.2 禁词。
      */
     @SuppressWarnings("SetJavaScriptEnabled")
     private void mountCashier(final String paymentUrl) {
@@ -970,7 +970,7 @@ public final class SdkUi implements FlowUi {
         header.addView(new TextView(host), new LinearLayout.LayoutParams(UiKit.dp(host, 44), 1));
         panel.addView(header, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 48)));
 
-        // 收银台远程 WebView(平台 H5;§1.13 加载态;站内 http(s),不外跳——外跳例外见 #61)
+        // 收银台远程 WebView(平台 H5;§1.13 加载态;http(s) 站内、微信/支付宝白名单 scheme 外跳——ADR-0014)
         final android.webkit.WebView web = new android.webkit.WebView(host);
         android.webkit.WebSettings ws = web.getSettings();
         ws.setJavaScriptEnabled(true);
@@ -1326,7 +1326,9 @@ public final class SdkUi implements FlowUi {
                     try {
                         host.startActivity(new android.content.Intent(
                                 android.content.Intent.ACTION_VIEW, android.net.Uri.parse(u)));
-                    } catch (android.content.ActivityNotFoundException e) {
+                    } catch (Exception e) {
+                        // 未安装(ActivityNotFoundException)+ SecurityException / 畸形 Uri 等一律兜底:
+                        // AAR 寄生游戏进程,任何未捕获异常都会带崩游戏,故放宽到 Exception(泛化提示不点名渠道)。
                         toast("未检测到所选支付应用,请安装后重试或换一种支付方式");
                     }
                     return true;
@@ -1363,9 +1365,9 @@ public final class SdkUi implements FlowUi {
 
     /**
      * 支付域外跳 scheme 白名单(01 §4.2 受限例外 / ADR-0014):仅微信、支付宝付款 scheme。
-     * 白名单外的非 http scheme 一律不外跳(通用外跳仍永久排除)。
+     * 白名单外的非 http scheme 一律不外跳(通用外跳仍永久排除)。package-private 供单测锁收窄、防无声放宽。
      */
-    private static boolean isPaySchemeWhitelisted(String u) {
+    static boolean isPaySchemeWhitelisted(String u) {
         if (u == null) {
             return false;
         }
