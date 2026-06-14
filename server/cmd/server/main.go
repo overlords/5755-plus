@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -49,7 +50,12 @@ func main() {
 	opt := bootstrapEnv(ctx, st, platformEnv)
 
 	baseURL := envOrDefault("PUBLIC_BASE_URL", "https://sdk-dev.xingninghuyu.com")
+	// #60 入站支付渠道(微信/支付宝):env 注入、fail-closed、绝不入码;
+	// notify/return URL 与 paymentUrl 同源(baseURL)。未配置渠道留 nil,请求时 503。
+	opt.Channels = buildPaymentChannels(baseURL)
 	svc := domain.NewWith(st, opt)
+	// 平台侧充值回调重投巡检:出站投递失败/投递中订单定时重投(游戏侧幂等),不依赖渠道重推 → 漏发自愈。
+	go svc.RunCallbackRetryLoop(ctx, callbackRetryInterval())
 	r := api.NewRouter(svc, st, time.Now, baseURL)
 
 	srv := &http.Server{
@@ -68,4 +74,14 @@ func envOrDefault(k, def string) string {
 		return v
 	}
 	return def
+}
+
+// callbackRetryInterval 充值回调重投巡检间隔(默认 30s,env CALLBACK_RETRY_INTERVAL_SECONDS 覆盖)。
+func callbackRetryInterval() time.Duration {
+	if s := os.Getenv("CALLBACK_RETRY_INTERVAL_SECONDS"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			return time.Duration(n) * time.Second
+		}
+	}
+	return 30 * time.Second
 }

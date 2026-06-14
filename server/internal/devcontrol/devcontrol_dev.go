@@ -105,9 +105,17 @@ func peekBodyGameID(c *gin.Context) string {
 	return probe.GameID
 }
 
-// RegisterPayPlaceholder dev 构建注册占位支付台页(生产构建 no-op → 404,M4-S3)。
-func RegisterPayPlaceholder(r *gin.Engine, handler gin.HandlerFunc) {
-	r.GET("/pay/:orderId", handler)
+// RegisterCashierPage 注册收银台首页路由 GET /pay/:orderId(ADR-0013:真收银台两构建)。
+// dev 构建:渠道已注入(如沙箱)→ 真收银台;无渠道 → dev 占位页(dev-control 联调兜底)。
+// production 构建(见 devcontrol_prod.go):恒真收银台(无渠道时真收银台自渲染"暂无可用支付方式")。
+func RegisterCashierPage(r *gin.Engine, devPlaceholder, realCashier gin.HandlerFunc, hasChannels func() bool) {
+	r.GET("/pay/:orderId", func(c *gin.Context) {
+		if hasChannels() {
+			realCashier(c)
+		} else {
+			devPlaceholder(c)
+		}
+	})
 }
 
 // Register 在 dev/local 构建下注册 /internal/dev-control/*,复用验签中间件。

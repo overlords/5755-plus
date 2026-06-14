@@ -17,7 +17,10 @@ chk "/healthz 200"                  "$(code "$B/healthz")" "200"
   || { echo "  ✗ healthz body 非预期"; fail=$((fail+1)); }
 chk "/internal/dev-control/state 404(生产排除①)" "$(code "$B/internal/dev-control/state")" "404"
 chk "/internal/dev-control/fault POST 404"       "$(codeX POST "$B/internal/dev-control/fault")" "404"
-chk "/pay/* 404(生产排除②)"        "$(code "$B/pay/P5755smoke")" "404"
+# #60:生产 /pay/:orderId 是真实收银台(非占位、非排除);不存在的订单 → 404(只读、不造单)。
+chk "/pay/<不存在订单> 404(收银台:无此单)" "$(code "$B/pay/P5755smoke")" "404"
+# 回调接收端存在且不走 HMAC:无签名 POST 不返 404(路由在);渠道验签在 handler 内,故非 200。
+chk "/pay/alinotify 路由存在(POST 非 404)" "$([ "$(codeX POST "$B/pay/alinotify")" != "404" ] && echo ok || echo no)" "ok"
 chk "/api/sdk/v2/config 无签名 401" "$(code "$B/api/sdk/v2/config")" "401"
 reason=$(curl -s -m8 "$B/api/sdk/v2/config" | python3 -c "import sys,json;print(json.load(sys.stdin).get('reason',''))" 2>/dev/null || echo "")
 [ "$reason" = "signature_invalid" ] \

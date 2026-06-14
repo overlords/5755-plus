@@ -5,8 +5,10 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,7 +17,8 @@ import (
 )
 
 // 生产构建排除复验(04 §3 三重防护①② + M4-S3):
-// /internal/* 与 /pay/* 路由不存在;实名 mock 关闭时 fail-closed。
+// /internal/* 路由不存在;dev 占位支付台页在生产被真实收银台替换(占位文案不再出现);
+// 实名 mock 关闭时 fail-closed。
 
 func TestDevControlAbsentInProduction(t *testing.T) {
 	srv, _ := setup(t)
@@ -25,11 +28,15 @@ func TestDevControlAbsentInProduction(t *testing.T) {
 	}
 }
 
-func TestPayPlaceholderAbsentInProduction(t *testing.T) {
+// #60:生产构建 /pay/:orderId 注册的是真实收银台(非 dev 占位页);占位文案不得出现。
+// 不存在的订单 → 收银台返回 404,但响应体绝不含 dev 占位页的 "dev 联调占位支付台" 字样。
+func TestDevPayPlaceholderReplacedInProduction(t *testing.T) {
 	srv, _ := setup(t)
 	resp, _ := doSigned(t, srv.URL, "GET", "/pay/P5755test", "", nil, 0, true, false)
-	if resp.StatusCode != 404 {
-		t.Fatalf("生产构建 /pay/* 应 404,得 %d", resp.StatusCode)
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if strings.Contains(string(body), "dev 联调占位支付台") {
+		t.Fatalf("生产构建不得渲染 dev 占位支付台页: %s", string(body))
 	}
 }
 

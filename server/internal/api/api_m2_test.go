@@ -88,6 +88,7 @@ func submitRealName(t *testing.T, srv *httptest.Server, paID, token string) {
 // ===== #11 账户有效检查 + kick =====
 
 func TestAccountCheckValidThenKick(t *testing.T) {
+	skipIfProd(t)
 	srv, _ := setup(t)
 	_, paID, token, _ := loginNewUser(t, srv)
 
@@ -186,6 +187,7 @@ func TestRealNameMinorAndInvalid(t *testing.T) {
 }
 
 func TestAntiAddictionInjectionOverrides(t *testing.T) {
+	skipIfProd(t)
 	srv, st := setup(t)
 	_, paID, token, _ := loginNewUser(t, srv)
 	submitRealName(t, srv, paID, token)
@@ -322,6 +324,7 @@ func TestSubaccountLoginRequiresAccount(t *testing.T) {
 }
 
 func TestInvalidationRouting(t *testing.T) {
+	skipIfProd(t)
 	srv, _ := setup(t)
 	_, paID, token, first := loginNewUser(t, srv)
 	lb, _ := json.Marshal(map[string]string{
@@ -346,6 +349,7 @@ func TestInvalidationRouting(t *testing.T) {
 }
 
 func TestKickRoutesToPlatformAccountInvalid(t *testing.T) {
+	skipIfProd(t)
 	srv, _ := setup(t)
 	_, paID, token, first := loginNewUser(t, srv)
 	kb, _ := json.Marshal(map[string]string{"gameId": seedGame, "platformAccountId": paID})

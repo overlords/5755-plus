@@ -97,6 +97,29 @@ func (s *Store) UpdateOrderStatus(ctx context.Context, platformOrderID, paymentS
 	return err
 }
 
+// ListUndeliveredPaidOrders 取已支付但充值回调未送达(投递失败/投递中)的订单,供平台侧重投巡检。
+// 渠道确认支付后即 ACK 止重推,出站充值回调的最终送达由本巡检补偿,不依赖渠道重推。
+func (s *Store) ListUndeliveredPaidOrders(ctx context.Context, limit int) ([]Order, error) {
+	rows, err := s.pool.Query(ctx, `SELECT platform_order_id, cp_order_id, account, game_id, platform_account_id,
+		amount::text, commodity, server_id, server_name, role_id, role_name, role_level, payment_status, callback_status
+		FROM orders WHERE payment_status='已支付' AND callback_status IN ('投递失败','投递中')
+		ORDER BY platform_order_id LIMIT $1`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Order
+	for rows.Next() {
+		var o Order
+		if err := rows.Scan(&o.PlatformOrderID, &o.CPOrderID, &o.Account, &o.GameID, &o.PlatformAccountID, &o.Amount,
+			&o.Commodity, &o.ServerID, &o.ServerName, &o.RoleID, &o.RoleName, &o.RoleLevel, &o.PaymentStatus, &o.CallbackStatus); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, rows.Err()
+}
+
 // ---------- #23 充值回调配置 ----------
 
 func (s *Store) GetCallbackURL(ctx context.Context, gameID string) (string, error) {

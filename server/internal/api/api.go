@@ -28,8 +28,13 @@ func NewRouter(svc *domain.Service, st *store.Store, now func() time.Time, baseU
 	// 运维面:无签名、只读
 	r.GET("/healthz", func(c *gin.Context) { c.String(200, "m5755 platform server ok") })
 	r.GET("/openapi.json", openAPIHandler)
-	// dev 占位支付台页面(无签名;production 构建不注册 → 404,M4-S3)
-	devcontrol.RegisterPayPlaceholder(r, payPlaceholderHandler(svc))
+
+	// #60 入站支付链路(不走 HMAC、不在 /internal):收银台首页 GET /pay/:orderId 两构建皆注册真收银台
+	// (ADR-0013:dev 注沙箱渠道即真收银台联调);dev 无渠道时降级 dev 占位页,prod 无渠道走真收银台"暂无"。
+	// 收银台交互 API / return sentinel / 渠道回调接收端两端皆注册。
+	hasChannels := func() bool { return svc.WechatEnabled() || svc.AlipayEnabled() }
+	devcontrol.RegisterCashierPage(r, payPlaceholderHandler(svc), CashierPageHandler(svc), hasChannels)
+	registerPayRoutes(r, svc)
 
 	mw := signature.Middleware(st.LookupSigningKey, now)
 
