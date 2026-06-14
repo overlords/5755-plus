@@ -828,6 +828,7 @@ public final class SdkUi implements FlowUi {
             public void onClick(View v) {
                 dismiss();
                 restoreFloatBall();
+                notifyPayClosed(false); // 付款前关闭订单确认抽屉=未完成(05 §3.1)
             }
         });
 
@@ -889,10 +890,106 @@ public final class SdkUi implements FlowUi {
         panel.addView(payBar, pbLp);
         confirm.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
-                // 客户端支付状态:已交接(仅 UI;发放以充值回调为准)
-                toast("支付处理中,等待服务端充值回调");
+                if (paymentUrl != null && !paymentUrl.isEmpty()) {
+                    // 生产:交接到平台收银台(07 §9)——容器内远程 WebView 加载,渠道 App 外跳待 #61/§5
+                    mountCashier(paymentUrl);
+                } else {
+                    // 演示/未接线:无收银台入口,提示后按未完成收口(不伪造支付结果、不假报已交接)
+                    toast("支付处理中,等待服务端充值回调");
+                    dismiss();
+                    restoreFloatBall();
+                    notifyPayClosed(false);
+                }
+            }
+        });
+
+        overlay.addView(panel, plp);
+        ViewGroup root = (ViewGroup) host.findViewById(android.R.id.content);
+        root.addView(overlay, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+    }
+
+    /**
+     * 平台收银台(生产支付,07 §9):订单确认后交接,在 SDK 自有支付容器内以远程 WebView 加载平台
+     * 收银台 H5(下单返回的 paymentUrl),套 §1.13 品牌加载态(占位 / 就绪淡入 / 失败重试)。玩家在
+     * 收银台内选择支付方式并付款。边界:loadableWeb 的 shouldOverrideUrlLoading 仅站内 http(s)、不外
+     * 跳;拉起第三方支付渠道 App 的 scheme 外跳属 01 §5 受限例外(#61),未授予前不接线——收银台可
+     * 展示,渠道 App 拉起待例外 + 业务资质。原生层只出现「5755 游戏支付」,不含 07 §0.2 禁词。
+     */
+    @SuppressWarnings("SetJavaScriptEnabled")
+    private void mountCashier(final String paymentUrl) {
+        boolean portrait = host.getResources().getConfiguration().orientation
+                == android.content.res.Configuration.ORIENTATION_PORTRAIT;
+        dismiss();
+        overlay = new FrameLayout(host);
+        overlay.setBackgroundColor(UiKit.MASK);
+        overlay.setClickable(true);
+
+        LinearLayout panel = new LinearLayout(host);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(UiKit.dp(host, 14), UiKit.dp(host, 10), UiKit.dp(host, 14), UiKit.dp(host, 14));
+
+        FrameLayout.LayoutParams plp;
+        int dm = host.getResources().getDisplayMetrics().widthPixels;
+        int dmh = host.getResources().getDisplayMetrics().heightPixels;
+        if (portrait) {
+            // 竖屏底部抽屉(07 §1.12):≤80% 高、顶圆角、抓手条(与订单确认抽屉同形态)
+            panel.setBackground(topRounded(0xFFF5F5F5, UiKit.dp(host, 16)));
+            TextView grab = new TextView(host);
+            grab.setBackground(UiKit.rounded(0xFFCFD2D8, UiKit.dp(host, 999)));
+            LinearLayout.LayoutParams glp = new LinearLayout.LayoutParams(UiKit.dp(host, 40), UiKit.dp(host, 4));
+            glp.gravity = Gravity.CENTER_HORIZONTAL;
+            glp.bottomMargin = UiKit.dp(host, 6);
+            panel.addView(grab, glp);
+            plp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, (int) (dmh * 0.8));
+            plp.gravity = Gravity.BOTTOM;
+        } else {
+            // 横屏右侧全高抽屉
+            panel.setBackgroundColor(0xFFF5F5F5);
+            int w = Math.min(dm, Math.max(UiKit.dp(host, 520), dm / 2));
+            plp = new FrameLayout.LayoutParams(w, ViewGroup.LayoutParams.MATCH_PARENT);
+            plp.gravity = Gravity.END;
+        }
+
+        // 头部:返回/收起 + 标题(原生层不出现 §0.2 禁词)
+        LinearLayout header = new LinearLayout(host);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        final TextView back = new TextView(host);
+        back.setText(portrait ? "⌄" : "‹");
+        back.setTextSize(26);
+        back.setTextColor(UiKit.PRIMARY_DEEP);
+        back.setWidth(UiKit.dp(host, 44));
+        back.setGravity(Gravity.CENTER);
+        header.addView(back);
+        TextView title = new TextView(host);
+        title.setText("5755 游戏支付");
+        title.setTextSize(20);
+        title.setTextColor(0xFF111111);
+        title.setGravity(Gravity.CENTER);
+        header.addView(title, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1));
+        header.addView(new TextView(host), new LinearLayout.LayoutParams(UiKit.dp(host, 44), 1));
+        panel.addView(header, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, UiKit.dp(host, 48)));
+
+        // 收银台远程 WebView(平台 H5;§1.13 加载态;站内 http(s),不外跳——外跳例外见 #61)
+        final android.webkit.WebView web = new android.webkit.WebView(host);
+        android.webkit.WebSettings ws = web.getSettings();
+        ws.setJavaScriptEnabled(true);
+        ws.setJavaScriptCanOpenWindowsAutomatically(false);
+        ws.setAllowFileAccess(false);
+        ws.setAllowFileAccessFromFileURLs(false);
+        ws.setAllowUniversalAccessFromFileURLs(false);
+        ws.setUserAgentString(ws.getUserAgentString() + " M5755Sdk/" + SDK_VERSION_UA);
+        LinearLayout.LayoutParams webLp = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1);
+        webLp.topMargin = UiKit.dp(host, 10);
+        panel.addView(loadableWeb(web, paymentUrl), webLp);
+
+        back.setOnClickListener(new View.OnClickListener() {
+            public void onClick(View v) {
+                web.loadUrl("about:blank");
                 dismiss();
                 restoreFloatBall();
+                notifyPayClosed(false); // 收银台关闭无结果信号→保守判未完成(05 §3.1;sentinel 区分待 #60)
             }
         });
 
@@ -932,6 +1029,21 @@ public final class SdkUi implements FlowUi {
         if (floatBall == null && floatAccount != null) {
             mountFloatBall(floatAccount);
         }
+    }
+
+    /**
+     * 支付容器终态信号 → controller.onPayContainerClosed(背景单线程,与 recharge 同执行器,
+     * 保证客户端支付回调单次)。照 onUserCenterAction 的桥模式;handed 区分已交接/未完成。
+     */
+    private void notifyPayClosed(final boolean handed) {
+        if (controller == null) {
+            return;
+        }
+        background.execute(new Runnable() {
+            public void run() {
+                controller.onPayContainerClosed(handed);
+            }
+        });
     }
 
     @SuppressWarnings({"SetJavaScriptEnabled", "AddJavascriptInterface"})

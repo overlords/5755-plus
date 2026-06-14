@@ -24,6 +24,12 @@ android {
         sourceCompatibility JavaVersion.VERSION_1_8
         targetCompatibility JavaVersion.VERSION_1_8
     }
+
+    // JVM 单测:未 mock 的平台调用(android.util.Log 等)返回默认值(no-op),
+    // 使纯逻辑(ColdStartController)中的诊断 Log 可被单测覆盖而不抛 "not mocked"。
+    testOptions {
+        unitTests.returnDefaultValues = true
+    }
 }
 
 dependencies {
