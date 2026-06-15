@@ -145,5 +145,7 @@
 | 读取来源 | Manifest meta-data(`m5755_channel`、`m5755.channel`、`com.m5755.channel`、`channel`)、APK Signing Block(`0x71777777`、`0x57550001`) |
 | 归一化 | 1-64 个 ASCII 字符;只允许字母、数字、下划线、短横线、点号;统一小写 |
 | 双来源一致性 | manifest 与 Signing Block 同时存在时,归一后必须一致;不一致解析为 `default`,原因 `source_mismatch` |
-| 回退 | 缺失、不可读、格式非法、来源不一致或与运营配置不一致时解析为 `default`,不阻断初始化、登录、角色上报或支付 |
-| 诊断字段 | `manifestChannelRaw`、`signingBlockChannelRaw`、`resolvedChannel`、`reason`(`missing`/`unreadable`/`invalid_format`/`source_mismatch`/`operations_mismatch`) |
+| 回退 | 缺失、不可读、格式非法、来源不一致时解析为 `default`,不阻断初始化、登录、角色上报或支付;「与运营配置不一致」(`operations_mismatch`)依赖平台渠道注册表,**v2 未实现、预留待 #32**(见表下注) |
+| 诊断字段 | `manifestChannelRaw`、`signingBlockChannelRaw`、`resolvedChannel`、`reason`(`missing`/`unreadable`/`invalid_format`/`source_mismatch` 已实现;`operations_mismatch` **预留未实现**,待 #32 渠道注册表) |
+
+> **关于 `operations_mismatch` 与渠道防篡改**:`operations_mismatch`(上报渠道不在平台合法渠道清单 → `default`)是防伪造渠道的设计,依赖**平台渠道注册表**,而注册表的填充来自 #32 推广链接生成端。v2 当前**未实现该校验**:SDK 侧读到格式合法的 channelId 即放行,服务端被动落库。需知:channelId 写在 APK Signing Block 自定义块、`channel-pack` 免重签可写,**渠道块本身无完整性保护**——双源一致性只能把单源篡改退化为 `default`(防劫持、不防破坏)。真正的渠道防篡改(channelId 签名验签 或 注册表校验)属生成端,见 #32。
