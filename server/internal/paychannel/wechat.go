@@ -3,15 +3,20 @@
 package paychannel
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"strconv"
 	"strings"
 	"time"
@@ -33,6 +38,7 @@ type WechatConfig struct {
 	PrivateKeyPEM        string
 	PlatformPublicKeyPEM string
 	NotifyURL            string
+	Gateway              string // 可选:API 网关(默认 https://api.mch.weixin.qq.com;微信无独立 H5 沙箱)
 }
 
 // Validate 返回缺失字段名列表;非空即配置未就绪(fail-closed 依据)。
@@ -150,6 +156,86 @@ func (s *WechatSigner) VerifyNotifySignature(timestamp, nonce, body, signatureB6
 		return fmt.Errorf("微信回调签名验证失败: %w", err)
 	}
 	return nil
+}
+
+// ---------- H5 预下单出网调用 ----------
+
+// defaultWechatGateway 微信支付 APIv3 正式网关(微信无独立 H5 沙箱网关,默认即正式)。
+const defaultWechatGateway = "https://api.mch.weixin.qq.com"
+
+var wechatHTTPClient = &http.Client{Timeout: 15 * time.Second}
+
+// PrepayH5 H5 预下单出网调用(/v3/pay/transactions/h5):构造并 APIv3 签名请求 → POST 微信网关
+// → 验响应签名(平台证书公钥)→ 解析 h5_url。返回供收银台拉起微信的 h5_url。
+// 商户密钥/证书由 env 注入;单一平台公钥,微信平台证书轮换期须更新 env 重启(serial 多证书池为后续增强)。
+func (s *WechatSigner) PrepayH5(in WechatPrepayInput) (string, error) {
+	body, err := s.BuildH5PrepayBody(in)
+	if err != nil {
+		return "", err
+	}
+	gateway := s.cfg.Gateway
+	if gateway == "" {
+		gateway = defaultWechatGateway
+	}
+	const urlPath = "/v3/pay/transactions/h5"
+	nonce, err := wechatNonce()
+	if err != nil {
+		return "", err
+	}
+	auth, err := s.AuthorizationHeader("POST", urlPath, string(body), time.Now(), nonce)
+	if err != nil {
+		return "", err
+	}
+	req, err := http.NewRequest("POST", gateway+urlPath, bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Authorization", auth)
+	req.Header.Set("User-Agent", "m5755-server")
+	resp, err := wechatHTTPClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("微信预下单请求失败: %w", err)
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if resp.StatusCode != 200 {
+		// 并入微信错误体({"code","message"})便于生产排障;截断防超长(错误体不含密钥)。
+		errBody := string(respBody)
+		if len(errBody) > 256 {
+			errBody = errBody[:256]
+		}
+		return "", fmt.Errorf("微信预下单 http=%d body=%s", resp.StatusCode, errBody)
+	}
+	// 验响应签名(平台证书公钥;未配置公钥则跳过——生产 Validate 要求必配)。
+	// 验签失败时把 Wechatpay-Serial 并入 error,便于在 domain 日志定位平台证书轮换不同步。
+	if s.publicKey != nil {
+		if err := s.VerifyNotifySignature(
+			resp.Header.Get("Wechatpay-Timestamp"),
+			resp.Header.Get("Wechatpay-Nonce"),
+			string(respBody),
+			resp.Header.Get("Wechatpay-Signature"),
+		); err != nil {
+			return "", fmt.Errorf("微信预下单响应验签失败(serial=%s): %w", resp.Header.Get("Wechatpay-Serial"), err)
+		}
+	}
+	var parsed struct {
+		H5URL string `json:"h5_url"`
+	}
+	if err := json.Unmarshal(respBody, &parsed); err != nil || parsed.H5URL == "" {
+		return "", errors.New("微信预下单响应缺 h5_url")
+	}
+	return parsed.H5URL, nil
+}
+
+// wechatNonce 生成 32 位十六进制随机串(APIv3 nonce_str)。
+func wechatNonce() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }
 
 // ---------- PEM 解析辅助 ----------

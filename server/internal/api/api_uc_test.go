@@ -138,8 +138,9 @@ func TestUserCenterOrders_OK(t *testing.T) {
 	srv, st := setup(t)
 	_, paID, token, first := loginNewUser(t, srv)
 
+	oid := "UO_uc_" + paID // 唯一主键(随新用户 paID),避免共享 DB 重跑撞 23505
 	if err := st.CreateOrder(context.Background(), store.Order{
-		PlatformOrderID: "UO_uc_test_1", CPOrderID: "cp_uc_1", Account: first, GameID: seedGame,
+		PlatformOrderID: oid, CPOrderID: "cp_" + paID, Account: first, GameID: seedGame,
 		PlatformAccountID: paID, Amount: "648.00", Commodity: "6480 元宝", ServerID: "s1",
 	}); err != nil {
 		t.Fatalf("seed 订单失败: %v", err)
@@ -154,7 +155,7 @@ func TestUserCenterOrders_OK(t *testing.T) {
 		t.Fatalf("应返回 seed 的订单: %+v", ar.Data)
 	}
 	o0, _ := orders[0].(map[string]interface{})
-	if o0["orderId"] != "UO_uc_test_1" {
+	if o0["orderId"] != oid {
 		t.Errorf("orderId 不符: %+v", o0)
 	}
 	if o0["productName"] != "6480 元宝" {

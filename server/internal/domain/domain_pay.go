@@ -91,20 +91,18 @@ func (svc *Service) BeginPayment(ctx context.Context, platformOrderID, method, p
 		if svc.channels.Wechat == nil {
 			return nil, fault(503, result.ReasonPlatformUnavailable, "微信支付未配置")
 		}
-		// H5 预下单(收银台为平台 H5,玩家在 WebView 内);拿 prepay 后由收银台拉起。
-		body, berr := svc.channels.Wechat.BuildH5PrepayBody(paychannel.WechatPrepayInput{
+		// H5 预下单出网调用(/v3/pay/transactions/h5):拿 h5_url 由收银台拉起微信(scheme 外跳属 #61)。
+		h5url, perr := svc.channels.Wechat.PrepayH5(paychannel.WechatPrepayInput{
 			OutTradeNo: o.PlatformOrderID, Description: o.Commodity, TotalFen: fen, PayerIP: payerIP,
 		})
-		if berr != nil {
-			return nil, fault(400, result.ReasonOrderInvalid, "微信预下单参数非法")
+		if perr != nil {
+			svc.log().Warn("wechat_prepay_failed", "platformOrderId", o.PlatformOrderID, "err", perr.Error())
+			return nil, fault(502, result.ReasonPlatformUnavailable, "微信预下单失败")
 		}
-		// 实际 HTTP 调用微信 /v3/pay/transactions/h5 需真实商户资质(见 #60 业务前置);
-		// 此处把签名头与请求体备好,留待资质就绪后接线真实出网调用。
-		_ = body
 		if err := svc.store.SetOrderPaymentMethod(ctx, o.PlatformOrderID, "wechat"); err != nil {
 			svc.log().Warn("set_payment_method_failed", "platformOrderId", o.PlatformOrderID, "method", "wechat", "err", err.Error())
 		}
-		return nil, fault(503, result.ReasonPlatformUnavailable, "微信支付待商户资质接线")
+		return &PrepayResult{Kind: "url", RedirectURL: h5url}, nil
 	case "alipay":
 		if svc.channels.Alipay == nil {
 			return nil, fault(503, result.ReasonPlatformUnavailable, "支付宝未配置")
