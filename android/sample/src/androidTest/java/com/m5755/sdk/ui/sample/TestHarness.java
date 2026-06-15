@@ -243,6 +243,16 @@ final class TestHarness {
         UiObject2 web = device.wait(Until.findObject(By.clazz("android.webkit.WebView")), WAIT);
         assertNotNull("应有 WebView 容器", web);
         UiObject2 el = web.findObject(By.textContains(textContains));
+        if (el == null) {
+            el = web.findObject(By.descContains(textContains)); // a11y name(aria-label)兜底,如 subhead「返回」
+        }
+        if (el == null) { // 横屏矮屏元素可能在 WebView 视口外:滚到底再找一次
+            web.scroll(androidx.test.uiautomator.Direction.DOWN, 1.0f);
+            el = web.findObject(By.textContains(textContains));
+            if (el == null) {
+                el = web.findObject(By.descContains(textContains));
+            }
+        }
         assertNotNull("WebView 内找不到: " + textContains, el);
         el.click();
     }
