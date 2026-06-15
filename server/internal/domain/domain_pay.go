@@ -78,7 +78,7 @@ func (svc *Service) BeginPayment(ctx context.Context, orderID, method, payerIP s
 	if err != nil {
 		return nil, fault(503, result.ReasonPlatformUnavailable, "订单读取失败")
 	}
-	if o.PaymentStatus != "待支付" {
+	if o.PaymentStatus != store.PaymentPending {
 		return nil, fault(409, result.ReasonOrderInvalid, "订单已非待支付状态")
 	}
 	fen, ferr := yuanStringToFen(o.Amount)
@@ -215,7 +215,7 @@ func (svc *Service) expectedOrderFen(ctx context.Context, orderID string) (int, 
 	if err != nil {
 		return 0, errOrderReadFailed
 	}
-	if o.PaymentStatus != "待支付" {
+	if o.PaymentStatus != store.PaymentPending {
 		return 0, errOrderNotPending
 	}
 	return yuanStringToFen(o.Amount)

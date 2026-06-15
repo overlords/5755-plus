@@ -5,16 +5,17 @@ package com.m5755.operate.api;
  */
 public final class Order extends RoleMeta {
 
-    private double amount;
+    private String amount = "";
     private String cpOrderId = "";
     private String commodity = "";
 
-    public double getAmount() {
+    /** 订单金额:两位小数字符串 ^\d+\.\d{2}$(如 "328.00"),单位元,> 0(04 §2.13)。 */
+    public String getAmount() {
         return amount;
     }
 
-    public void setAmount(double v) {
-        this.amount = v;
+    public void setAmount(String v) {
+        this.amount = v == null ? "" : v;
     }
 
     public String getCpOrderId() {

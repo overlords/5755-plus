@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"m5755/server/internal/domain"
+	"m5755/server/internal/store"
 )
 
 // renderCashierPage 渲染平台收银台 H5。展示金额/商品 + 微信|支付宝单选 + 确认支付。
@@ -16,7 +17,7 @@ func renderCashierPage(co *domain.CashierOrder) string {
 	amount := html.EscapeString(co.Amount)
 	commodity := html.EscapeString(co.Commodity)
 
-	if co.PaymentStatus != "待支付" {
+	if co.PaymentStatus != store.PaymentPending {
 		// 已支付/失败订单不再展示收银,给无害终态。
 		return cashierClosedPage(co.PaymentStatus)
 	}

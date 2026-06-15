@@ -102,11 +102,11 @@
 
 **订单号（`orderId`）**：平台为一笔订单签发的全局唯一标识（`orders` 表主键，= 渠道 `out_trade_no`）。是**充值回调幂等去重的权威键**（游戏服务端对同一 `orderId` 只发一次货）、支付链路与平台日志检索键。规范名 `orderId`，**不写作 `platformOrderId`**：「订单」裸词本就归平台（游戏侧才限定为「CP 订单号」），无需 `platform` 前缀；该前缀只保留给裸词已被小号占用的字段（`platformAccountId` / `platformToken`），不泛用。
 
-**CP 订单号（`cpOrderId`）**：游戏服务端在调用支付前生成的订单标识（游戏侧自保唯一，平台不强制约束）；平台在充值回调中原样返回，游戏侧用于归属与金额**交叉校验**，**不作幂等去重键**（去重用 `orderId`）。不写作 mark。
+**CP 订单号（`cpOrderId`）**：游戏服务端在调用支付前生成的订单标识；**平台按 `(gameId, cpOrderId)` 创建侧幂等**（同键重放/重复下单返回已存在订单或拒，见 04 §2.9.1），**跨游戏不保证唯一**；平台在充值回调中原样返回，游戏侧用于归属与金额**交叉校验**，**回调不作幂等去重键**（去重用 `orderId`）。不写作 mark。
 
 **订单金额（`amount`）/ 实付金额（`payAmount`）**：`amount` 为订单应付金额（商品价格，规范裸词）；`payAmount` 为玩家实付金额（变体，故带限定）。v2 **无折扣、无券（`01 §4.2` 永久排除）、无余额抵扣（ADR-0012 范围外）**，故 `payAmount` 当前**恒等于 `amount`**；保留 `payAmount` 作**前向兼容缝**（ADR-0012），待将来折扣 / 余额能力经 `01 §5` 评审落地时承载真实实付语义。不写作 `money` / `pay_money`（旧下划线形已退役）。
 
-**serverKey（游戏服务端密钥：`serverKeyId` + `serverSecret`）**：平台后台**按游戏**发放给**游戏服务端**（独立主体，非 SDK）的一对密钥（ADR-0016）。`serverKeyId` 是非密标识、`serverSecret` 是 HMAC-SHA256 密钥；同一把两用途：① 游戏服务端调登录态校验（`GET subaccount-sessions`）的入站签名（§1.3 同算法 + ±300s 窗口）；② 平台发**充值回调**时用 `serverSecret` 签，回调体带 `serverKeyId` 标明所用密钥（供游戏选密钥验签、留优雅轮换路）。**不焊 AAR**（区别于 SDK 网关面焊死的 keyId）；v2 默认每游戏**单把 active key**，存于 `signing_keys` 表 `principal='server'`，越权调登录态校验以外端点返 `principal_not_allowed`。区别于 `platformToken`（玩家会话令牌、Bearer）、SDK keyId（焊 AAR）。
+**serverKey（游戏服务端密钥：`serverKeyId` + `serverSecret`）**：平台后台**按游戏**发放给**游戏服务端**（独立主体，非 SDK）的一对密钥（ADR-0016）。`serverKeyId` 是非密标识、`serverSecret` 是 HMAC-SHA256 密钥；同一把两用途：① 游戏服务端调登录态校验（`GET subaccount-sessions`）的入站签名（§1.3 同算法 + ±300s 窗口）；② 平台发**充值回调**时用 `serverSecret` 签，回调体带 `serverKeyId` 标明所用密钥（供游戏选密钥验签、留优雅轮换路）。**不焊 AAR**（区别于 SDK 网关面焊死的 keyId）；v2 默认每游戏**单把 active key**，存于 `signing_keys` 表（`principal='server'` + `game_id` 标定所属游戏）；**serverKey 与游戏绑定**——登录态校验须校验调用 serverKey 的 `game_id` 与被查 `gameId` 一致（不符 403，堵跨租户探测），越权调登录态校验以外端点返 `principal_not_allowed`。轮换:出站充值回调签该游戏**最新** active serverKey、入站登录态校验认该游戏**任一** active serverKey（游戏切换窗口内新旧皆可，靠回调体 `serverKeyId` 选密钥验）。区别于 `platformToken`（玩家会话令牌、Bearer）、SDK keyId（焊 AAR）。
 
 **支付订单入参**：接入方通过 SDK 支付订单对象传入的字段集合；支付 UI 展示和支付请求必须以这些字段为准。
 
@@ -176,7 +176,9 @@
 
 **可采集诊断输出**：样例、流水线、自检报告或排查流程可稳定读取和归档的诊断输出；临时日志和人工截图不算。
 
-**设备标识能力**：围绕设备、包体和环境标识的采集、传递和诊断能力，用于归因、风控和排障；不代表游戏小号、角色或游戏内唯一用户。
+**设备验证**：密码登录在**未信任的新设备**上要求额外通过一次短信验证码才放行的登录第二因子（验过即信任该设备、此后免验）。**每游戏开关**（`games.device_verification_enabled`），**v2 默认关闭**：关（默认）= 密码登录纯密码（bcrypt），`deviceId` 不强制；开 = fail-closed，`deviceId` 必填、新设备须 `deviceVerifyCode`（短信验证码有爆破上限）。**作用域 = 账户 × 安装**：设备信任键为 `(platformAccountId, deviceId)`，`deviceId` 是 SDK **安装级随机标识**（每 App 私有存储生成、卸载重装即重置）→ **不跨游戏**，装另一款游戏 `deviceId` 不同需重验。跨游戏免验需跨 App 稳定的物理设备标识（指纹化），与隐私立场冲突、未选（见「设备标识能力」与 ADR-0017）。不是短信验证码登录本身，也不是防沉迷或维护门禁。
+
+**设备标识能力**：围绕设备、包体和环境标识的采集、传递和诊断能力，用于归因、风控和排障；不代表游戏小号、角色或游戏内唯一用户。**不指纹化物理设备**：v2 不采集 OAID / Android ID 等跨 App 稳定物理标识（`01` 范围外），故「设备验证」用安装级随机 `deviceId`、信任不跨游戏（呼应 ADR-0017）。
 
 **渠道标识符**：平台或分发链路为游戏包标记的来源标识；不代表游戏、当前小号、角色或支付渠道。1-64 个 ASCII 字符，仅字母、数字、下划线、短横线、点号，归一为小写。生成端（推广链接创建）须遵三条硬约束：**禁用保留值 `default`**、**全局唯一**（跨会长不得撞同名，否则归因混淆）、**格式与读取端归一化对齐**（同样 1-64 小写 `[a-z0-9_.-]`，否则大小写或非法字符经读取端归一后撞车或丢归因）；防篡改与扩展形态见 ADR-0015。
 

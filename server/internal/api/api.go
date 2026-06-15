@@ -59,6 +59,9 @@ func NewRouter(svc *domain.Service, st *store.Store, now func() time.Time, baseU
 // principalScope 在验签之后做端点作用域授权(#86 / ADR-0016)。
 // 游戏服务端 serverKey(principal=='server')只许调登录态校验 GET /api/sdk/v2/subaccount-sessions,
 // 调任何其他 v2 端点一律 403 拒绝;SDK keyId(principal=='sdk' 或空)放行所有端点。
+// 在登录态校验端点上,还校验 serverKey↔game 绑定:serverKey 的归属游戏(context game_id)必须与
+// 被查 gameId 一致,game_id 为空或不符一律 403(serverKey 与被查游戏不符),复用 principal_not_allowed
+// (同属主体越权);SDK keyId(game_id 空、全局)不做 game 比对。
 // 验签已在前置中间件通过,故拒绝用 principal_not_allowed(授权层)而非 signature_invalid(验签层)。
 func principalScope() gin.HandlerFunc {
 	const loginCheckPath = "/api/sdk/v2/subaccount-sessions"
@@ -69,6 +72,13 @@ func principalScope() gin.HandlerFunc {
 		}
 		// 游戏服务端 serverKey:仅放行登录态校验 GET。
 		if c.Request.Method == http.MethodGet && c.FullPath() == loginCheckPath {
+			keyGameID := c.GetString(signature.ContextKeyGameID)
+			if keyGameID == "" || keyGameID != c.Query("gameId") {
+				result.WriteFail(c, http.StatusForbidden, result.ReasonPrincipalNotAllowed,
+					"serverKey 与被查游戏不符")
+				c.Abort()
+				return
+			}
 			c.Next()
 			return
 		}

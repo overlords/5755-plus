@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -66,7 +65,7 @@ func (svc *Service) ReportRole(ctx context.Context, in RoleInput) (*Fault, map[s
 
 type OrderInput struct {
 	GameID, Account, Token                     string
-	Amount                                     float64
+	Amount                                     string
 	CPOrderID, Commodity, ServerID, ServerName string
 	RoleID, RoleName, RoleLevel                string
 }
@@ -90,8 +89,13 @@ func (svc *Service) CreateOrder(ctx context.Context, in OrderInput, baseURL stri
 	if !ok || account != in.Account {
 		return nil, fault(401, result.ReasonSubaccountInvalid, "游戏小号登录态无效或归属不符")
 	}
-	// 字段校验(05 §2):无演示订单兜底
-	if in.Amount <= 0 || in.Amount > 1e9 {
+	// 字段校验(05 §2):无演示订单兜底。amount 为两位小数字符串 ^\d+\.\d{2}$,
+	// 值 > 0 且 < 1e9(解析仅用于范围判断,不持久化 float,存的是已校验的原字符串)。
+	if !amountRe.MatchString(in.Amount) {
+		return nil, fault(400, result.ReasonOrderInvalid, "金额非法")
+	}
+	amountVal, perr := strconv.ParseFloat(in.Amount, 64)
+	if perr != nil || amountVal <= 0 || amountVal >= 1e9 {
 		return nil, fault(400, result.ReasonOrderInvalid, "金额非法")
 	}
 	if in.CPOrderID == "" || len(in.CPOrderID) > 128 {
@@ -117,7 +121,7 @@ func (svc *Service) CreateOrder(ctx context.Context, in OrderInput, baseURL stri
 	}
 
 	orderID := "P5755" + strconv.FormatInt(svc.now().UnixNano(), 10)
-	amount := fmt.Sprintf("%.2f", in.Amount)
+	amount := in.Amount
 	err = svc.store.CreateOrder(ctx, store.Order{
 		OrderID: orderID, CPOrderID: in.CPOrderID, Account: account, GameID: in.GameID,
 		PlatformAccountID: platformAccountID, Amount: amount, Commodity: in.Commodity,
@@ -176,29 +180,29 @@ func (svc *Service) CompletePayment(ctx context.Context, gameID, orderID, mode s
 		return fault(503, result.ReasonPlatformUnavailable, "订单读取失败")
 	}
 	if mode == "失败" {
-		_ = svc.store.UpdateOrderStatus(ctx, orderID, "支付失败", "未投递")
+		_ = svc.store.UpdateOrderStatus(ctx, orderID, store.PaymentFailed, store.CallbackPending)
 		svc.log().Info("payment_completed", "orderId", orderID,
-			"gameId", gameID, "account", maskAccount(o.Account), "result", "支付失败")
+			"gameId", gameID, "account", maskAccount(o.Account), "result", store.PaymentFailed)
 		return nil
 	}
-	_ = svc.store.UpdateOrderStatus(ctx, orderID, "已支付", "投递中")
+	_ = svc.store.UpdateOrderStatus(ctx, orderID, store.PaymentPaid, store.CallbackDelivering)
 	callbackURL, err := svc.store.GetCallbackURL(ctx, gameID)
 	if err != nil || callbackURL == "" {
-		_ = svc.store.UpdateOrderStatus(ctx, orderID, "已支付", "无回调地址")
+		_ = svc.store.UpdateOrderStatus(ctx, orderID, store.PaymentPaid, store.CallbackNoURL)
 		svc.log().Warn("callback_skipped", "orderId", orderID,
-			"gameId", gameID, "reason", "无回调地址")
+			"gameId", gameID, "reason", store.CallbackNoURL)
 		return nil
 	}
-	confirmed := svc.dispatchCallback(callbackURL, o)
+	confirmed := svc.dispatchCallback(ctx, callbackURL, o)
 	if mode == "超时" {
 		// 重复推送语义:再投一次(同笔字段一致)
-		confirmed = svc.dispatchCallback(callbackURL, o) || confirmed
+		confirmed = svc.dispatchCallback(ctx, callbackURL, o) || confirmed
 	}
-	status := "已确认"
+	status := store.CallbackConfirmed
 	if !confirmed {
-		status = "投递失败"
+		status = store.CallbackFailed
 	}
-	_ = svc.store.UpdateOrderStatus(ctx, orderID, "已支付", status)
+	_ = svc.store.UpdateOrderStatus(ctx, orderID, store.PaymentPaid, status)
 	svc.log().Info("callback_settled", "orderId", orderID, "gameId", gameID,
 		"account", maskAccount(o.Account), "cpOrderId", o.CPOrderID, "callbackStatus", status, "mode", mode)
 	return nil
@@ -220,8 +224,8 @@ func (svc *Service) RedeliverPendingCallbacks(ctx context.Context) (attempted, c
 			continue // 无回调地址无法重投(订单已落"无回调地址"或游戏缺配),非本巡检可补偿
 		}
 		attempted++
-		if svc.dispatchCallback(callbackURL, &o) {
-			_ = svc.store.UpdateOrderStatus(ctx, o.OrderID, "已支付", "已确认")
+		if svc.dispatchCallback(ctx, callbackURL, &o) {
+			_ = svc.store.UpdateOrderStatus(ctx, o.OrderID, store.PaymentPaid, store.CallbackConfirmed)
 			confirmed++
 			svc.log().Info("callback_redelivered", "orderId", o.OrderID, "gameId", o.GameID)
 		}
@@ -247,8 +251,8 @@ func (svc *Service) RunCallbackRetryLoop(ctx context.Context, interval time.Dura
 }
 
 // devServerKeyID 是 dev 路径的固定 serverKeyId(migration 0010 seed 的 'dev-server-key',
-// 其 secret 与 callbackSecret 一致 'm5755-dev-callback-secret-v1')。真实游戏方的 per-game
-// serverKey 发放/联调归 #59,本批仅做到 dev 路径正确(选密钥据该游戏 serverKey 记录,缺则回退此默认)。
+// 其 secret 与 callbackSecret 一致 'm5755-dev-callback-secret-v1')。游戏未配 per-game serverKey 时
+// 出站签名回退此默认;已配则据该游戏 active serverKey 记录选 keyId/secret 签。
 const devServerKeyID = "dev-server-key"
 
 // dispatchCallback 向游戏服务端推送充值回调,有限重试;游戏侧 {code:200,msg:success} 视为确认。
@@ -258,8 +262,8 @@ const devServerKeyID = "dev-server-key"
 //
 // serverKeyId 是非密的密钥标识,进签名串;接收方据它选对应 serverSecret 验签(为优雅轮换留路)。
 // payAmount 恒等 amount(v2 无折扣/券/余额,前向兼容缝,ADR-0012)。
-func (svc *Service) dispatchCallback(url string, o *store.Order) bool {
-	serverKeyID, serverSecret := svc.callbackKeyForGame(o.GameID)
+func (svc *Service) dispatchCallback(ctx context.Context, url string, o *store.Order) bool {
+	serverKeyID, serverSecret := svc.signingServerKey(ctx, o.GameID)
 	payload := map[string]string{
 		"account": o.Account, "orderId": o.OrderID, "cpOrderId": o.CPOrderID,
 		"amount": o.Amount, "payAmount": o.Amount, "commodity": o.Commodity,
@@ -281,10 +285,16 @@ func (svc *Service) dispatchCallback(url string, o *store.Order) bool {
 	return false
 }
 
-// callbackKeyForGame 返回该游戏充值回调签名用的 (serverKeyId, serverSecret)。
-// TODO(#59):接 per-game serverKey 发放后,据 gameId 查该游戏 active serverKey 记录并用其
-// serverKeyId/secret 签;在此之前回退 dev 默认(dev-server-key + callbackSecret,二者 secret 一致)。
-func (svc *Service) callbackKeyForGame(_ string) (serverKeyID, serverSecret string) {
+// signingServerKey 返回该游戏出站签名(充值回调)用的 (serverKeyId, serverSecret):
+// 取该游戏最新 active serverKey(principal='server',ServerKeyForGame);查到则用其 keyId/secret 签,
+// 未配 per-game serverKey(或查询失败)则回退 dev 默认(dev-server-key + callbackSecret,二者 secret 一致)。
+// 仅出站签名用途;入站验签据 header keyId 走 LookupSigningKey(认任一 active),勿混用。
+func (svc *Service) signingServerKey(ctx context.Context, gameID string) (serverKeyID, serverSecret string) {
+	if svc.store != nil {
+		if keyID, secret, ok, err := svc.store.ServerKeyForGame(ctx, gameID); err == nil && ok {
+			return keyID, secret
+		}
+	}
 	return devServerKeyID, svc.callbackSecret
 }
 

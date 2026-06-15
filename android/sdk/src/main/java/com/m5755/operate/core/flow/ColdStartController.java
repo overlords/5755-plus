@@ -495,7 +495,7 @@ public final class ColdStartController {
         // 展示支付容器(订单显示取自 Order 入参,05 §2.3)
         java.util.Map<String, String> display = new java.util.LinkedHashMap<String, String>();
         display.put("商品", order.getCommodity());
-        display.put("金额", "￥" + String.format(java.util.Locale.ROOT, "%.2f", order.getAmount()));
+        display.put("金额", "￥" + order.getAmount());
         display.put("小号", account);
         display.put("区服", order.getServerName());
         display.put("角色", order.getRoleName());
@@ -530,8 +530,13 @@ public final class ColdStartController {
     }
 
     private static String validateOrder(com.m5755.operate.api.Order o) {
-        if (!(o.getAmount() > 0) || Double.isNaN(o.getAmount()) || Double.isInfinite(o.getAmount())) {
-            return "金额必须大于 0";
+        String amount = o.getAmount();
+        if (amount == null || !amount.matches("\\d+\\.\\d{2}")) {
+            return "金额须为两位小数字符串(如 328.00)";
+        }
+        double v = Double.parseDouble(amount);
+        if (!(v > 0) || v >= 1e9) {
+            return "金额必须大于 0 且小于 1e9";
         }
         if (isBlank(o.getCpOrderId()) || o.getCpOrderId().length() > 128) {
             return "CP 订单号非法";

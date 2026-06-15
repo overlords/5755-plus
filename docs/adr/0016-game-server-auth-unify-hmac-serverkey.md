@@ -68,3 +68,12 @@
 - 最终回调体:`account · orderId · cpOrderId · amount · payAmount · commodity · serverId · serverName · serverKeyId · sign`。
 
 **待落地改动面**:04 §4 / §2.7.2、05、`server-facing-openapi.yaml`、`integration-guide §5`、`domain_m3.go`(回调体 + per-game serverKey 选密钥签)、migrations(`orders` / `payment_notifications` 列 `platform_order_id` → `order_id`,新增 `0011`)、`mock-gameserver` / `smoke-alipay`(验签复刻 + `orderId` 幂等 + `serverKeyId` 选密钥)、Android `Results.java` / `HttpPlatformGateway.java` / `ColdStartController.java`、相关单测。02 术语已即时回写(`orderId` / `cpOrderId` / `amount` / `payAmount` / `serverKey`)。
+
+## 更新(2026-06-15 grill「检查数据结构」):per-game serverKey 数据建模落地
+
+上「serverKey 轮换」与「per-game serverKey 选密钥签」此前在数据层缺位——`signing_keys` 表无 `game_id`,无法表达「这把 serverKey 属于哪个游戏」,选密钥与跨租户边界都落不了。本轮把它补成真实数据建模。
+
+- **`signing_keys` 加 `game_id`(migration `0012`,append-only,不回改 `0001`/`0010`)**:`principal='server'` 行绑所属游戏(dev `dev-server-key` → `m5755-demo`);`principal='sdk'` 行 `game_id=''` = **全局**(SDK keyId 焊 AAR、不绑游戏)。
+- **出站签名真按游戏选密钥**:`callbackKeyForGame` 改名 **`signingServerKey(gameID)`**,真调 `store.ServerKeyForGame(gameID)` 取该游戏**最新 active** serverKey 签;未配 per-game serverKey 则回退 dev 默认(`dev-server-key` + `callbackSecret`)。「轮换出站签最新 active」从口径落成实现。
+- **登录态校验校 serverKey↔game 绑定**:验签通过后把 key 的 `game_id` 存进 context;`principalScope()` 对 `principal='server'` 调 `GET subaccount-sessions` **追加**校验——serverKey 的 `game_id` 与请求 `gameId` 不符(或 `game_id` 为空)即 **403 `principal_not_allowed`**(同属主体越权,message 区分「serverKey 与被查游戏不符」),堵游戏 A 的 serverKey 探测游戏 B 登录态的跨租户路径。`principal='sdk'`(`game_id` 空、全局)**不做** game 比对。
+- **SDK keyId 维持全局、不绑游戏**:它焊 AAR、可被提取,真正的账号边界在小号 `token`(服务端校验),给它补 game 授权无意义;游戏隔离只加在独立主体 serverKey 上。

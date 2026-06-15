@@ -6,7 +6,7 @@ SDK 会联系三类外部域:①平台网关 API host;②静态协议(法律页)
 
 - **API host**(`baseHost`):按 flavor 写在构建配置 `m5755-sdk-platform.properties`(联调 `sdk-dev.xingninghuyu.com` / 生产 `sdk.xingninghuyu.com`)。必须按环境拆(dev/prod 是不同后端),构建期固定、运行时不可切换(环境不变量)。见 ADR-0004。
 - **协议域**(`PROTOCOL_BASE`):SDK 内置硬编码常量 `https://p.xingninghuyu.com/agreement/`,各 flavor 同值。
-- **用户中心 URL**(`userCenterUrl`):平台经 `GET /config`(04 §2.1)下发,按游戏配置;dev/prod 由「应答的平台部署」天然区分,SDK 不硬编码、仅末尾追加 `?token=<platformToken>`。
+- **用户中心 URL**(`userCenterUrl`):平台经 `GET /config`(04 §2.1)下发,按游戏配置;dev/prod 由「应答的平台部署」天然区分,SDK 不硬编码、仅末尾追加 `#token=<platformToken>`(**fragment 而非 query**,使主账户令牌不进平台侧访问日志/Referer;见 04 §2.1 / 06 §5 / 06a §7)。
 
 理由(为何各异):
 - API host 是后端本体,dev 与 prod 是真不同的服务器 → 必须按 flavor 拆 + 构建期固定。

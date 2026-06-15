@@ -102,8 +102,8 @@ func (s *Store) UpdateOrderStatus(ctx context.Context, orderID, paymentStatus, c
 func (s *Store) ListUndeliveredPaidOrders(ctx context.Context, limit int) ([]Order, error) {
 	rows, err := s.pool.Query(ctx, `SELECT order_id, cp_order_id, account, game_id, platform_account_id,
 		amount::text, commodity, server_id, server_name, role_id, role_name, role_level, payment_status, callback_status
-		FROM orders WHERE payment_status='已支付' AND callback_status IN ('投递失败','投递中')
-		ORDER BY order_id LIMIT $1`, limit)
+		FROM orders WHERE payment_status=$1 AND callback_status IN ($2,$3)
+		ORDER BY order_id LIMIT $4`, PaymentPaid, CallbackFailed, CallbackDelivering, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -159,6 +159,26 @@ func (s *Store) FindAccountByLogin(ctx context.Context, loginAccount string) (pl
 		return "", "", "", false, e
 	}
 	return platformAccountID, passwordHash, displayName, true, nil
+}
+
+// DeviceVerificationEnabled 读某游戏的设备验证开关(#25,migration 0015,default false)。
+// DB 错→error(调用方据此 fail-closed 到 503);无行(游戏不存在)→false=关。
+func (s *Store) DeviceVerificationEnabled(ctx context.Context, gameID string) (bool, error) {
+	var enabled bool
+	err := s.pool.QueryRow(ctx, `SELECT device_verification_enabled FROM games WHERE game_id=$1`, gameID).Scan(&enabled)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return enabled, nil
+}
+
+// SetDeviceVerificationEnabled 翻该游戏的设备验证开关(运维/测试夹具用;生产由配置面管理)。
+func (s *Store) SetDeviceVerificationEnabled(ctx context.Context, gameID string, enabled bool) error {
+	_, err := s.pool.Exec(ctx, `UPDATE games SET device_verification_enabled=$2 WHERE game_id=$1`, gameID, enabled)
+	return err
 }
 
 func (s *Store) IsDeviceTrusted(ctx context.Context, platformAccountID, deviceID string) (bool, error) {

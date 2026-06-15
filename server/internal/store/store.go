@@ -147,17 +147,33 @@ func (s *Store) GetGameConfig(ctx context.Context, gameID string) (*GameConfig, 
 
 // ---------- 验签密钥 ----------
 
-// LookupSigningKey 按 keyId 取密钥与调用主体类型(principal:'sdk'=SDK 网关面 / 'server'=游戏
-// 服务端 serverKey,ADR-0016);ok=false 表示未知或已停用 keyId。
-func (s *Store) LookupSigningKey(ctx context.Context, keyID string) (secret, principal string, ok bool, err error) {
-	err = s.pool.QueryRow(ctx, `SELECT secret, principal FROM signing_keys WHERE key_id=$1 AND active`, keyID).Scan(&secret, &principal)
+// LookupSigningKey 按 keyId 取密钥、调用主体类型与归属游戏(principal:'sdk'=SDK 网关面、game_id 空
+// 为全局密钥 / 'server'=游戏服务端 serverKey、game_id 为其归属游戏,ADR-0016);ok=false 表示未知或已停用 keyId。
+// gameID 用于入站验签后做 serverKey↔game 绑定校验(principal='sdk' 的全局密钥 gameID 为空,不参与游戏比对)。
+func (s *Store) LookupSigningKey(ctx context.Context, keyID string) (secret, principal, gameID string, ok bool, err error) {
+	err = s.pool.QueryRow(ctx, `SELECT secret, principal, game_id FROM signing_keys WHERE key_id=$1 AND active`, keyID).Scan(&secret, &principal, &gameID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", "", "", false, nil
+	}
+	if err != nil {
+		return "", "", "", false, err
+	}
+	return secret, principal, gameID, true, nil
+}
+
+// ServerKeyForGame 取某游戏当前出站签名用的 serverKey(最新 active,principal='server')。
+// 用于充值回调出站签名据 gameId 选对应游戏的 serverKey;ok=false 表示该游戏未配 per-game serverKey。
+func (s *Store) ServerKeyForGame(ctx context.Context, gameID string) (keyID, secret string, ok bool, err error) {
+	err = s.pool.QueryRow(ctx, `SELECT key_id, secret FROM signing_keys
+		WHERE game_id=$1 AND principal='server' AND active
+		ORDER BY created_at DESC LIMIT 1`, gameID).Scan(&keyID, &secret)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", "", false, nil
 	}
 	if err != nil {
 		return "", "", false, err
 	}
-	return secret, principal, true, nil
+	return keyID, secret, true, nil
 }
 
 // ---------- 短信验证码 ----------
@@ -197,26 +213,59 @@ const (
 	SmsConsumeExpired
 )
 
-// ConsumeSmsCode 校验并消费最近一条匹配验证码:返回消费结果。
+// smsMaxAttempts 是单条验证码允许的最大错误猜测次数;达此值即作废该码(consumed=true),
+// 防止校验端点(无限流)在 5 分钟有效期内对 10^6 数字空间无限爆破登入任意账户。
+const smsMaxAttempts = 5
+
+// ConsumeSmsCode 校验并消费该(游戏,登录号)的最新未消费验证码:返回消费结果。
+//
+// race-safe:在单事务内用 SELECT ... FOR UPDATE 锁住目标行,使并发猜测串行化、错误计数
+// 不可被绕过;达 smsMaxAttempts 即把该码 consumed=true 作废(静默,不向攻击者泄露"已锁定")。
+//
+// 匹配口径从"按猜测值查码"改为"按最新未消费码查行,再比对猜测":计数必须固定在同一行才有意义。
+// 正常登录/设备验证流里,用户当前要验的码就是其最新请求的那条(设备码在 device-required 后即时
+// 下发=最新),故语义不变;旧码被新码取代符合标准 OTP「最新码生效」。
 func (s *Store) ConsumeSmsCode(ctx context.Context, gameID, loginAccount, code string) (SmsConsume, error) {
-	var codeID string
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return SmsConsumeInvalid, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }() // 成功路径已 Commit,此处为安全网(已提交则无操作)
+
+	var codeID, stored string
 	var expiresAt time.Time
-	err := s.pool.QueryRow(ctx, `SELECT code_id, expires_at FROM sms_codes
-		WHERE game_id=$1 AND login_account=$2 AND code=$3 AND NOT consumed
-		ORDER BY created_at DESC LIMIT 1`, gameID, loginAccount, code).Scan(&codeID, &expiresAt)
+	var attempts int
+	err = tx.QueryRow(ctx, `SELECT code_id, code, expires_at, attempts FROM sms_codes
+		WHERE game_id=$1 AND login_account=$2 AND NOT consumed
+		ORDER BY created_at DESC LIMIT 1 FOR UPDATE`, gameID, loginAccount).Scan(&codeID, &stored, &expiresAt, &attempts)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return SmsConsumeInvalid, nil
+		return SmsConsumeInvalid, nil // 无可用码
 	}
 	if err != nil {
 		return SmsConsumeInvalid, err
 	}
 	if time.Now().After(expiresAt) {
-		return SmsConsumeExpired, nil
+		return SmsConsumeExpired, nil // 过期不消费、不计数,维持原语义
 	}
-	if _, err := s.pool.Exec(ctx, `UPDATE sms_codes SET consumed=true WHERE code_id=$1`, codeID); err != nil {
+	if code == stored {
+		if _, err := tx.Exec(ctx, `UPDATE sms_codes SET consumed=true WHERE code_id=$1`, codeID); err != nil {
+			return SmsConsumeInvalid, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return SmsConsumeInvalid, err
+		}
+		return SmsConsumeOK, nil
+	}
+	// 猜错:自增 attempts;达上限同时作废该码(下次查不到该码→仍 Invalid),不新增 SmsConsume 取值。
+	consume := attempts+1 >= smsMaxAttempts
+	if _, err := tx.Exec(ctx, `UPDATE sms_codes SET attempts=attempts+1, consumed=consumed OR $2 WHERE code_id=$1`,
+		codeID, consume); err != nil {
 		return SmsConsumeInvalid, err
 	}
-	return SmsConsumeOK, nil
+	if err := tx.Commit(ctx); err != nil {
+		return SmsConsumeInvalid, err
+	}
+	return SmsConsumeInvalid, nil
 }
 
 // ---------- 账户 / 会话 / 小号 ----------

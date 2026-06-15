@@ -298,7 +298,7 @@ public class ColdStartControllerTest {
     public void rechargeInvalidOrderNoRequest() {
         Fixture f = loggedInWithSubaccount();
         com.m5755.operate.api.Order o = validOrder();
-        o.setAmount(0); // 非法
+        o.setAmount("0"); // 非法:非两位小数字符串
         final boolean[] cb = {false};
         f.c.recharge(o, (s, code, m) -> cb[0] = s);
         assertFalse(cb[0]);
@@ -314,6 +314,11 @@ public class ColdStartControllerTest {
         f.c.recharge(validOrder(), null);
         assertTrue(f.ui.calls.contains("showPayDrawer"));
         assertEquals("648 元宝", f.ui.lastPayDisplay.get("商品"));
+        assertEquals("￥328.00", f.ui.lastPayDisplay.get("金额"));
+        // 下单请求体 amount 以两位小数字符串透传(org.json 据此序列化为 JSON 字符串,非数字)
+        assertEquals("328.00", f.gw.lastOrderBody.get("amount"));
+        assertTrue("amount 须为 String 类型,确保 JSON 序列化为字符串而非 number",
+                f.gw.lastOrderBody.get("amount") instanceof String);
     }
 
     @Test
@@ -466,7 +471,7 @@ public class ColdStartControllerTest {
 
     private static com.m5755.operate.api.Order validOrder() {
         com.m5755.operate.api.Order o = new com.m5755.operate.api.Order();
-        o.setAmount(328.0);
+        o.setAmount("328.00");
         o.setCpOrderId("cp_1");
         o.setCommodity("648 元宝");
         o.setServerId("s1");
@@ -624,7 +629,10 @@ public class ColdStartControllerTest {
             return roleReport;
         }
 
+        java.util.Map<String, Object> lastOrderBody;
+
         public Results.OrderCreate createOrder(String a, String b, String c, java.util.Map<String, Object> o) {
+            lastOrderBody = o;
             return orderCreate;
         }
     }
