@@ -7,13 +7,18 @@
  */
 
 // ---- platformToken 捕获(纯函数,06a §7;可测)----
-// 取 ?token= 值并产出抹除 token 的 URL(保留其他 query/hash)。
+// 取 #token= 值(token 走 URL fragment 而非 query,见 ADR-0018:fragment 不发往服务器、
+// 不进访问日志/Referer)并产出抹除 token 段的 URL;hash 路由(#/orders 等)在 token 抹除后照常工作。
 function captureToken(href) {
   const u = new URL(href);
-  const token = u.searchParams.get('token') || '';
-  const had = u.searchParams.has('token');
-  if (had) u.searchParams.delete('token');
-  return { token, had, cleanUrl: u.pathname + u.search + u.hash };
+  const hp = new URLSearchParams(u.hash.replace(/^#/, ''));
+  if (!hp.has('token')) {
+    return { token: '', had: false, cleanUrl: u.pathname + u.search + u.hash };
+  }
+  const token = hp.get('token') || '';
+  hp.delete('token');
+  const rest = hp.toString();
+  return { token, had: true, cleanUrl: u.pathname + u.search + (rest ? '#' + rest : '') };
 }
 
 // ---- 响应失效收口(纯函数,06a §3;可测)----

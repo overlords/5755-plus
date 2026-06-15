@@ -1065,7 +1065,8 @@ public final class SdkUi implements FlowUi {
         final View centerView;
         if (userCenterUrl != null && !userCenterUrl.isEmpty()) {
             // #5:平台用户中心 H5,带 platformToken;§1.13 套加载态(占位 + 就绪淡入 + 失败重试)
-            String sep = userCenterUrl.contains("?") ? "&" : "?";
+            // token 走 URL fragment(#)而非 query(?):fragment 不发往服务器,不进平台访问日志/代理缓存/Referer(ADR-0018,对齐 04 §1.4)
+            String sep = userCenterUrl.contains("#") ? "&" : "#";
             centerView = loadableWeb(web, userCenterUrl + sep + "token=" + android.net.Uri.encode(platformToken), false);
         } else {
             // 未配置 URL:瞬时本地回退页,不套加载态(避免一闪)

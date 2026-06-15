@@ -20,7 +20,7 @@
 ## 2. 网关铸 token → uc 真读(live 走通)
 
 - 网关侧用真实 dev 短信链路自给凭据铸主账户令牌:`POST /api/sdk/v2/sms-codes`(mock provider 返回 `devCode`)→ `POST /api/sdk/v2/account-sessions`(`loginMethod=sms`)→ 取 `platformToken`。
-- uc SPA 凭 `?token=` 注入该令牌(加载即 `captureToken` 入内存 + `history.replaceState` 抹除可见 URL),`X-M5755-Platform-Token` 头真读 `profile` / `orders`,渲染如证据 1。
+- uc SPA 凭 `#token=`(URL fragment,ADR-0018:fragment 不发往服务器、不进访问日志/Referer)注入该令牌(加载即 `captureToken` 从 `location.hash` 入内存 + `history.replaceState` 抹除可见 URL),`X-M5755-Platform-Token` 头真读 `profile` / `orders`,渲染如证据 1。令牌传输方式(query→fragment)不影响主页渲染证据。
 - `USE_MOCK=false`、`API_ORIGIN` 走绝对域(dev: `https://sdk-dev.xingninghuyu.com`)。
 
 ## 3. uc 真写 + 失效收口(live 走通)
