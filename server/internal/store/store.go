@@ -147,17 +147,33 @@ func (s *Store) GetGameConfig(ctx context.Context, gameID string) (*GameConfig, 
 
 // ---------- 验签密钥 ----------
 
-// LookupSigningKey 按 keyId 取密钥与调用主体类型(principal:'sdk'=SDK 网关面 / 'server'=游戏
-// 服务端 serverKey,ADR-0016);ok=false 表示未知或已停用 keyId。
-func (s *Store) LookupSigningKey(ctx context.Context, keyID string) (secret, principal string, ok bool, err error) {
-	err = s.pool.QueryRow(ctx, `SELECT secret, principal FROM signing_keys WHERE key_id=$1 AND active`, keyID).Scan(&secret, &principal)
+// LookupSigningKey 按 keyId 取密钥、调用主体类型与归属游戏(principal:'sdk'=SDK 网关面、game_id 空
+// 为全局密钥 / 'server'=游戏服务端 serverKey、game_id 为其归属游戏,ADR-0016);ok=false 表示未知或已停用 keyId。
+// gameID 用于入站验签后做 serverKey↔game 绑定校验(principal='sdk' 的全局密钥 gameID 为空,不参与游戏比对)。
+func (s *Store) LookupSigningKey(ctx context.Context, keyID string) (secret, principal, gameID string, ok bool, err error) {
+	err = s.pool.QueryRow(ctx, `SELECT secret, principal, game_id FROM signing_keys WHERE key_id=$1 AND active`, keyID).Scan(&secret, &principal, &gameID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", "", "", false, nil
+	}
+	if err != nil {
+		return "", "", "", false, err
+	}
+	return secret, principal, gameID, true, nil
+}
+
+// ServerKeyForGame 取某游戏当前出站签名用的 serverKey(最新 active,principal='server')。
+// 用于充值回调出站签名据 gameId 选对应游戏的 serverKey;ok=false 表示该游戏未配 per-game serverKey。
+func (s *Store) ServerKeyForGame(ctx context.Context, gameID string) (keyID, secret string, ok bool, err error) {
+	err = s.pool.QueryRow(ctx, `SELECT key_id, secret FROM signing_keys
+		WHERE game_id=$1 AND principal='server' AND active
+		ORDER BY created_at DESC LIMIT 1`, gameID).Scan(&keyID, &secret)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", "", false, nil
 	}
 	if err != nil {
 		return "", "", false, err
 	}
-	return secret, principal, true, nil
+	return keyID, secret, true, nil
 }
 
 // ---------- 短信验证码 ----------

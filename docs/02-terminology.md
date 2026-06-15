@@ -106,7 +106,7 @@
 
 **订单金额（`amount`）/ 实付金额（`payAmount`）**：`amount` 为订单应付金额（商品价格，规范裸词）；`payAmount` 为玩家实付金额（变体，故带限定）。v2 **无折扣、无券（`01 §4.2` 永久排除）、无余额抵扣（ADR-0012 范围外）**，故 `payAmount` 当前**恒等于 `amount`**；保留 `payAmount` 作**前向兼容缝**（ADR-0012），待将来折扣 / 余额能力经 `01 §5` 评审落地时承载真实实付语义。不写作 `money` / `pay_money`（旧下划线形已退役）。
 
-**serverKey（游戏服务端密钥：`serverKeyId` + `serverSecret`）**：平台后台**按游戏**发放给**游戏服务端**（独立主体，非 SDK）的一对密钥（ADR-0016）。`serverKeyId` 是非密标识、`serverSecret` 是 HMAC-SHA256 密钥；同一把两用途：① 游戏服务端调登录态校验（`GET subaccount-sessions`）的入站签名（§1.3 同算法 + ±300s 窗口）；② 平台发**充值回调**时用 `serverSecret` 签，回调体带 `serverKeyId` 标明所用密钥（供游戏选密钥验签、留优雅轮换路）。**不焊 AAR**（区别于 SDK 网关面焊死的 keyId）；v2 默认每游戏**单把 active key**，存于 `signing_keys` 表 `principal='server'`，越权调登录态校验以外端点返 `principal_not_allowed`。区别于 `platformToken`（玩家会话令牌、Bearer）、SDK keyId（焊 AAR）。
+**serverKey（游戏服务端密钥：`serverKeyId` + `serverSecret`）**：平台后台**按游戏**发放给**游戏服务端**（独立主体，非 SDK）的一对密钥（ADR-0016）。`serverKeyId` 是非密标识、`serverSecret` 是 HMAC-SHA256 密钥；同一把两用途：① 游戏服务端调登录态校验（`GET subaccount-sessions`）的入站签名（§1.3 同算法 + ±300s 窗口）；② 平台发**充值回调**时用 `serverSecret` 签，回调体带 `serverKeyId` 标明所用密钥（供游戏选密钥验签、留优雅轮换路）。**不焊 AAR**（区别于 SDK 网关面焊死的 keyId）；v2 默认每游戏**单把 active key**，存于 `signing_keys` 表（`principal='server'` + `game_id` 标定所属游戏）；**serverKey 与游戏绑定**——登录态校验须校验调用 serverKey 的 `game_id` 与被查 `gameId` 一致（不符 403，堵跨租户探测），越权调登录态校验以外端点返 `principal_not_allowed`。轮换:出站充值回调签该游戏**最新** active serverKey、入站登录态校验认该游戏**任一** active serverKey（游戏切换窗口内新旧皆可，靠回调体 `serverKeyId` 选密钥验）。区别于 `platformToken`（玩家会话令牌、Bearer）、SDK keyId（焊 AAR）。
 
 **支付订单入参**：接入方通过 SDK 支付订单对象传入的字段集合；支付 UI 展示和支付请求必须以这些字段为准。
 

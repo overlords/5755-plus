@@ -189,10 +189,10 @@ func (svc *Service) CompletePayment(ctx context.Context, gameID, orderID, mode s
 			"gameId", gameID, "reason", "无回调地址")
 		return nil
 	}
-	confirmed := svc.dispatchCallback(callbackURL, o)
+	confirmed := svc.dispatchCallback(ctx, callbackURL, o)
 	if mode == "超时" {
 		// 重复推送语义:再投一次(同笔字段一致)
-		confirmed = svc.dispatchCallback(callbackURL, o) || confirmed
+		confirmed = svc.dispatchCallback(ctx, callbackURL, o) || confirmed
 	}
 	status := "已确认"
 	if !confirmed {
@@ -220,7 +220,7 @@ func (svc *Service) RedeliverPendingCallbacks(ctx context.Context) (attempted, c
 			continue // 无回调地址无法重投(订单已落"无回调地址"或游戏缺配),非本巡检可补偿
 		}
 		attempted++
-		if svc.dispatchCallback(callbackURL, &o) {
+		if svc.dispatchCallback(ctx, callbackURL, &o) {
 			_ = svc.store.UpdateOrderStatus(ctx, o.OrderID, "已支付", "已确认")
 			confirmed++
 			svc.log().Info("callback_redelivered", "orderId", o.OrderID, "gameId", o.GameID)
@@ -247,8 +247,8 @@ func (svc *Service) RunCallbackRetryLoop(ctx context.Context, interval time.Dura
 }
 
 // devServerKeyID 是 dev 路径的固定 serverKeyId(migration 0010 seed 的 'dev-server-key',
-// 其 secret 与 callbackSecret 一致 'm5755-dev-callback-secret-v1')。真实游戏方的 per-game
-// serverKey 发放/联调归 #59,本批仅做到 dev 路径正确(选密钥据该游戏 serverKey 记录,缺则回退此默认)。
+// 其 secret 与 callbackSecret 一致 'm5755-dev-callback-secret-v1')。游戏未配 per-game serverKey 时
+// 出站签名回退此默认;已配则据该游戏 active serverKey 记录选 keyId/secret 签。
 const devServerKeyID = "dev-server-key"
 
 // dispatchCallback 向游戏服务端推送充值回调,有限重试;游戏侧 {code:200,msg:success} 视为确认。
@@ -258,8 +258,8 @@ const devServerKeyID = "dev-server-key"
 //
 // serverKeyId 是非密的密钥标识,进签名串;接收方据它选对应 serverSecret 验签(为优雅轮换留路)。
 // payAmount 恒等 amount(v2 无折扣/券/余额,前向兼容缝,ADR-0012)。
-func (svc *Service) dispatchCallback(url string, o *store.Order) bool {
-	serverKeyID, serverSecret := svc.callbackKeyForGame(o.GameID)
+func (svc *Service) dispatchCallback(ctx context.Context, url string, o *store.Order) bool {
+	serverKeyID, serverSecret := svc.signingServerKey(ctx, o.GameID)
 	payload := map[string]string{
 		"account": o.Account, "orderId": o.OrderID, "cpOrderId": o.CPOrderID,
 		"amount": o.Amount, "payAmount": o.Amount, "commodity": o.Commodity,
@@ -281,10 +281,16 @@ func (svc *Service) dispatchCallback(url string, o *store.Order) bool {
 	return false
 }
 
-// callbackKeyForGame 返回该游戏充值回调签名用的 (serverKeyId, serverSecret)。
-// TODO(#59):接 per-game serverKey 发放后,据 gameId 查该游戏 active serverKey 记录并用其
-// serverKeyId/secret 签;在此之前回退 dev 默认(dev-server-key + callbackSecret,二者 secret 一致)。
-func (svc *Service) callbackKeyForGame(_ string) (serverKeyID, serverSecret string) {
+// signingServerKey 返回该游戏出站签名(充值回调)用的 (serverKeyId, serverSecret):
+// 取该游戏最新 active serverKey(principal='server',ServerKeyForGame);查到则用其 keyId/secret 签,
+// 未配 per-game serverKey(或查询失败)则回退 dev 默认(dev-server-key + callbackSecret,二者 secret 一致)。
+// 仅出站签名用途;入站验签据 header keyId 走 LookupSigningKey(认任一 active),勿混用。
+func (svc *Service) signingServerKey(ctx context.Context, gameID string) (serverKeyID, serverSecret string) {
+	if svc.store != nil {
+		if keyID, secret, ok, err := svc.store.ServerKeyForGame(ctx, gameID); err == nil && ok {
+			return keyID, secret
+		}
+	}
 	return devServerKeyID, svc.callbackSecret
 }
 

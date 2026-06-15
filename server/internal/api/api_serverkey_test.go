@@ -23,23 +23,39 @@ func TestServerKey_LookupAndVerify(t *testing.T) {
 	srv, st := setup(t)
 	ctx := context.Background()
 
-	// 1) store 层:serverKey 查到 secret + principal=server
-	secret, principal, ok, err := st.LookupSigningKey(ctx, serverKeyID)
+	// 1) store 层:serverKey 查到 secret + principal=server + game_id=该游戏(grill 第 1 刀)
+	secret, principal, gameID, ok, err := st.LookupSigningKey(ctx, serverKeyID)
 	if err != nil || !ok {
 		t.Fatalf("dev-server-key 应查到: ok=%v err=%v", ok, err)
 	}
 	if secret != serverSecret || principal != "server" {
 		t.Fatalf("serverKey secret/principal 不符: secret=%q principal=%q", secret, principal)
 	}
+	if gameID != seedGame {
+		t.Fatalf("dev-server-key game_id 应绑 %q, 得到 %q", seedGame, gameID)
+	}
 
-	// 2) SDK keyId principal=sdk(区分主体)
-	if _, sdkP, sdkOK, _ := st.LookupSigningKey(ctx, seedKeyID); !sdkOK || sdkP != "sdk" {
-		t.Fatalf("dev-test-key 应为 sdk principal: ok=%v principal=%q", sdkOK, sdkP)
+	// 2) SDK keyId principal=sdk、game_id 空(全局,区分主体)
+	if _, sdkP, sdkGame, sdkOK, _ := st.LookupSigningKey(ctx, seedKeyID); !sdkOK || sdkP != "sdk" || sdkGame != "" {
+		t.Fatalf("dev-test-key 应为 sdk principal、game_id 空: ok=%v principal=%q gameID=%q", sdkOK, sdkP, sdkGame)
 	}
 
 	// 3) 未知 keyId → ok=false
-	if _, _, unknownOK, _ := st.LookupSigningKey(ctx, "no-such-key"); unknownOK {
+	if _, _, _, unknownOK, _ := st.LookupSigningKey(ctx, "no-such-key"); unknownOK {
 		t.Fatal("未知 keyId 应 ok=false")
+	}
+
+	// 4) store.ServerKeyForGame 取该游戏出站签名用的最新 active serverKey
+	skID, skSecret, skOK, skErr := st.ServerKeyForGame(ctx, seedGame)
+	if skErr != nil || !skOK {
+		t.Fatalf("ServerKeyForGame(%q) 应查到: ok=%v err=%v", seedGame, skOK, skErr)
+	}
+	if skID != serverKeyID || skSecret != serverSecret {
+		t.Fatalf("ServerKeyForGame 选错密钥: keyId=%q secret=%q", skID, skSecret)
+	}
+	// 未配 per-game serverKey 的游戏 → ok=false
+	if _, _, noOK, _ := st.ServerKeyForGame(ctx, "no-such-game"); noOK {
+		t.Fatal("无 serverKey 的游戏应 ok=false")
 	}
 
 	// 4) 端点层:serverKey 签名调 config,验签通过(不应 signature_invalid)

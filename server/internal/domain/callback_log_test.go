@@ -2,6 +2,7 @@ package domain
 
 import (
 	"bytes"
+	"context"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -29,7 +30,7 @@ func TestDispatchCallbackLogsChainWithoutSecret(t *testing.T) {
 		OrderID: "P5755TEST1", CPOrderID: "cp-abc-123", Account: "ga_57550001_0025",
 		Amount: "1.00", Commodity: "钻石", ServerID: "s1", ServerName: "一区",
 	}
-	if ok := svc.dispatchCallback(ts.URL, o); !ok {
+	if ok := svc.dispatchCallback(context.Background(), ts.URL, o); !ok {
 		t.Fatalf("dispatchCallback 应在游戏端回 {code:200,msg:success} 时确认成功")
 	}
 

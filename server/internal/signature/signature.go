@@ -25,10 +25,14 @@ const (
 	WindowSeconds   = 300
 	// ContextKeyPrincipal:验签通过后存入 gin context 的调用主体类型('sdk'/'server',ADR-0016),供端点授权。
 	ContextKeyPrincipal = "keyPrincipal"
+	// ContextKeyGameID:验签通过后存入 gin context 的密钥归属游戏(serverKey 为其游戏、SDK 全局密钥为空),
+	// 供端点授权做 serverKey↔game 绑定校验(grill「检查数据结构」第 1 刀)。
+	ContextKeyGameID = "keyGameID"
 )
 
-// KeyLookup 按 keyId 取签名密钥与主体类型('sdk'/'server',ADR-0016);ok=false 表示未知 keyId。
-type KeyLookup func(ctx context.Context, keyID string) (secret, principal string, ok bool, err error)
+// KeyLookup 按 keyId 取签名密钥、主体类型与归属游戏('sdk'/'server',ADR-0016;
+// gameID 对 serverKey 为其归属游戏、对全局 SDK 密钥为空);ok=false 表示未知 keyId。
+type KeyLookup func(ctx context.Context, keyID string) (secret, principal, gameID string, ok bool, err error)
 
 // Canonical 构造签名原文:方法\n路径\n字典序query\n时间戳\n请求体(GET 体为空串)。
 // 规范化 query 在原始 token(k=v)层面做字典序排序,避免 encode/decode 歧义,两端一致。
@@ -86,7 +90,7 @@ func Middleware(lookup KeyLookup, now func() time.Time) gin.HandlerFunc {
 			return
 		}
 
-		secret, principal, ok, err := lookup(c.Request.Context(), keyID)
+		secret, principal, gameID, ok, err := lookup(c.Request.Context(), keyID)
 		if err != nil {
 			result.WriteFail(c, 503, result.ReasonPlatformUnavailable, "验签密钥查询失败")
 			c.Abort()
@@ -98,6 +102,7 @@ func Middleware(lookup KeyLookup, now func() time.Time) gin.HandlerFunc {
 			return
 		}
 		c.Set(ContextKeyPrincipal, principal) // 供端点授权(#86)区分 SDK / 游戏服务端调用者
+		c.Set(ContextKeyGameID, gameID)       // 供端点授权做 serverKey↔game 绑定校验(serverKey 归属游戏;SDK 全局密钥为空)
 
 		var body []byte
 		if c.Request.Body != nil {

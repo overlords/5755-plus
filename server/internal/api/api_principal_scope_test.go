@@ -57,6 +57,44 @@ func TestPrincipalScope_ServerKeyAllowedOnLoginCheck(t *testing.T) {
 	}
 }
 
+// TestPrincipalScope_ServerKeyGameMismatch 验证 serverKey↔game 绑定(grill「检查数据结构」第 1 刀):
+// 游戏 A 的 serverKey(dev-server-key,game_id=m5755-demo)调 gameId=B 的登录态校验 → 403 +
+// reason=principal_not_allowed(serverKey 与被查游戏不符);验签通过(非 signature_invalid)。
+func TestPrincipalScope_ServerKeyGameMismatch(t *testing.T) {
+	srv, _ := setup(t)
+	query := "account=does-not-matter&gameId=some-other-game"
+	resp, ar := signWith(t, srv.URL, serverKeyID, serverSecret,
+		"GET", "/api/sdk/v2/subaccount-sessions", query)
+
+	if ar.Reason == "signature_invalid" {
+		t.Fatalf("serverKey 签名应验签通过、不应 signature_invalid;reason=%q", ar.Reason)
+	}
+	if resp.StatusCode != http.StatusForbidden || ar.Reason != "principal_not_allowed" {
+		t.Fatalf("serverKey 调他游戏登录态校验应 403 + principal_not_allowed;得到 status=%d reason=%q",
+			resp.StatusCode, ar.Reason)
+	}
+}
+
+// TestPrincipalScope_ServerKeyGameMatch 验证绑定相符放行:
+// dev-server-key(game_id=m5755-demo)调 gameId=m5755-demo 的登录态校验 →
+// 不因 game 绑定被 403(业务结果不论;非 signature_invalid、非 principal_not_allowed)。
+func TestPrincipalScope_ServerKeyGameMatch(t *testing.T) {
+	srv, _ := setup(t)
+	query := "account=does-not-matter&gameId=" + seedGame
+	resp, ar := signWith(t, srv.URL, serverKeyID, serverSecret,
+		"GET", "/api/sdk/v2/subaccount-sessions", query)
+
+	if resp.StatusCode == http.StatusForbidden {
+		t.Fatalf("serverKey 调本游戏登录态校验不应 403;reason=%q", ar.Reason)
+	}
+	if ar.Reason == "principal_not_allowed" {
+		t.Fatalf("serverKey↔game 相符不应 principal_not_allowed;reason=%q", ar.Reason)
+	}
+	if ar.Reason == "signature_invalid" {
+		t.Fatalf("serverKey 签名应验签通过;reason=%q", ar.Reason)
+	}
+}
+
 // TestPrincipalScope_ServerKeyForbiddenOnConfig 验证 serverKey 调登录态校验之外的端点被授权拒绝:
 // 验签通过(非 signature_invalid)但 403 + reason=principal_not_allowed。
 func TestPrincipalScope_ServerKeyForbiddenOnConfig(t *testing.T) {
