@@ -3,7 +3,8 @@ package domain
 import (
 	"bytes"
 	"context"
-	"crypto/md5"
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -300,7 +301,9 @@ func (svc *Service) postCallback(url string, body []byte) bool {
 	return ack.Code == 200 && ack.Msg == "success"
 }
 
-// callbackSign:对参数(除 sign)按键字典序拼接 + 密钥,MD5(平台回调签名规则)。
+// callbackSign:对参数(除 sign)按键字典序逐对拼 `键=值&`(含最后一对),
+// 以 serverSecret 为密钥对该串做 HMAC-SHA256,hex 小写(04 §4 / ADR-0016)。
+// 密钥是 HMAC 参数、不拼进串(旧 MD5 口径末尾的 `key=<密钥>` 已移除)。
 func callbackSign(params map[string]string, secret string) string {
 	keys := make([]string, 0, len(params))
 	for k := range params {
@@ -316,10 +319,9 @@ func callbackSign(params map[string]string, secret string) string {
 		sb.WriteString(params[k])
 		sb.WriteString("&")
 	}
-	sb.WriteString("key=")
-	sb.WriteString(secret)
-	sum := md5.Sum([]byte(sb.String()))
-	return hex.EncodeToString(sum[:])
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(sb.String()))
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 // VerifyCallbackSign 供测试接收端复用,验证签名一致。

@@ -4,17 +4,17 @@
 // 它做且只做四件事:
 //  1. 监听 HTTP,接收平台(5755)发来的充值回调 POST(application/json,单层对象,sign 平级)。
 //  2. 用与平台 dispatchCallback **逐字节一致**的方式验签:
-//     算法 MD5、密钥来自 -secret(默认 dev 口径 m5755-dev-callback-secret-v1)、
-//     待签串 = 除 sign 外全部键按字典序 `k=v&...` 末尾接 `key=<secret>`(详见 verifyCallbackSign)。
+//     算法 HMAC-SHA256(ADR-0016)、密钥(HMAC key)来自 -secret(默认 dev 口径 m5755-dev-callback-secret-v1)、
+//     待签串 = 除 sign 外全部键按字典序 `k=v&...`(末尾对仍带 &;secret 作 HMAC 密钥、不拼进串)(详见 signCallback)。
 //  3. 验签通过 → 幂等"发放"并回游戏侧确认体 {"code":200,"msg":"success"}(平台据此判"已确认")。
 //     验签失败 → 回 4xx 并记录(平台据此判"投递失败",会进入重投巡检)。
 //  4. 每笔落结构化日志(订单号、CP 订单号、金额、验签结果、幂等命中)。
 //
 // 设计取舍:本程序**只用标准库**,不 import internal/domain —— 因为 internal/domain
 // 会传递性拖入 pgx/gin/bcrypt 等 DB/Web 依赖,与"独立可部署的 mock 游戏服务端"相悖。
-// verifyCallbackSign 是 internal/domain/domain_m3.go:304-323 callbackSign 的逐字节复刻
-// (同算法 MD5、同排序 sort.Strings、同 `k=v&` 逐对拼接、同 `key=<secret>` 后缀),
-// 两端用同一字节构造,故签名可被本 mock 复算验通。升级到 HMAC-SHA256 时(#59 待定),
+// signCallback 是 internal/domain/domain_m3.go callbackSign 的逐字节复刻
+// (同算法 HMAC-SHA256、同排序 sort.Strings、同 `k=v&` 逐对拼接含末尾 &、secret 同作 HMAC 密钥),
+// 两端用同一字节构造,故签名可被本 mock 复算验通。平台出站签名口径若再变,
 // 只需同步改这一个函数与平台 callbackSign 即可。
 //
 // 用法:
@@ -24,7 +24,8 @@
 package main
 
 import (
-	"crypto/md5"
+	"crypto/hmac"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"flag"
@@ -57,7 +58,7 @@ func main() {
 	})
 
 	logger.Info("mock_gameserver_start", "addr", *addr, "callbackPath", *path,
-		"secretLen", len(*secret), "signAlgo", "MD5(k=v&...key=secret)")
+		"secretLen", len(*secret), "signAlgo", "HMAC-SHA256(secret, k=v&...&)")
 	httpSrv := &http.Server{
 		Addr:              *addr,
 		Handler:           mux,
@@ -164,16 +165,16 @@ func (s *mockGameServer) writeFail(w http.ResponseWriter, status int, reason str
 	_, _ = w.Write([]byte(`{"code":` + itoa(status) + `,"msg":"` + reason + `"}`))
 }
 
-// signCallback 是 internal/domain/domain_m3.go:304-323 callbackSign 的逐字节复刻。
+// signCallback 是 internal/domain/domain_m3.go callbackSign 的逐字节复刻(ADR-0016 HMAC-SHA256)。
 //
 // 待签串构造(必须与平台完全一致,否则验不过):
 //  1. 取 params 中除 "sign" 外的全部键;
 //  2. 按键名用 Go sort.Strings(UTF-8 字节序,大写/下划线先于小写)升序排列;
 //  3. 对每个键拼接 `key=value&`(每对后都带 `&`,**包括最后一对**);
-//  4. 末尾再追加 `key=<secret>`(注意 `key` 这个字面字段名 + secret,**无尾随 &**);
-//  5. 对整串 UTF-8 字节做 MD5,输出十六进制小写。
+//  4. 以 secret 为 HMAC 密钥对该串 UTF-8 字节做 HMAC-SHA256,输出十六进制小写
+//     (注意:secret 是 HMAC 密钥参数、**不拼进串**;旧 MD5 口径末尾的 `key=<secret>` 已移除)。
 //
-// 例:account=a&amount=6.00&...&serverName=星河一区&key=m5755-dev-callback-secret-v1 → md5 → hex。
+// 例:HMAC-SHA256(m5755-dev-callback-secret-v1, "account=a&amount=6.00&...&serverName=星河一区&") → hex。
 func signCallback(params map[string]string, secret string) string {
 	keys := make([]string, 0, len(params))
 	for k := range params {
@@ -189,10 +190,9 @@ func signCallback(params map[string]string, secret string) string {
 		sb.WriteString(params[k])
 		sb.WriteString("&")
 	}
-	sb.WriteString("key=")
-	sb.WriteString(secret)
-	sum := md5.Sum([]byte(sb.String()))
-	return hex.EncodeToString(sum[:])
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(sb.String()))
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 // constTimeEqual 定长比较签名,避免时序泄漏(mock 非生产,但作为参考实现保持口径)。

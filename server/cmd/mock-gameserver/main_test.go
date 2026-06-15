@@ -8,7 +8,7 @@ import (
 
 // TestMockSignMatchesPlatform 把 mock 的 signCallback 与平台真相源 domain.callbackSign 绑死:
 // mock 签出的 sign 必须能被平台 domain.VerifyCallbackSign 验过,否则支付宝沙箱联调的「全链」会假绿
-// (mock 永远验不过、或恒真)。平台若改出站签名口径(如 #59 把 MD5 升 HMAC-SHA256),此测试立即 fail,
+// (mock 永远验不过、或恒真)。平台出站签名口径已为 HMAC-SHA256(ADR-0016);若再变,此测试立即 fail,
 // 逼 mock 的 signCallback 同步跟进。用 13 键完整 payload + 中文 UTF-8,贴近真实回调。
 func TestMockSignMatchesPlatform(t *testing.T) {
 	const secret = "m5755-dev-callback-secret-v1" // dev 默认(bootstrap_dev.go),与平台 CALLBACK_SECRET 一致
@@ -29,7 +29,7 @@ func TestMockSignMatchesPlatform(t *testing.T) {
 
 	if !domain.VerifyCallbackSign(payload, secret) {
 		t.Fatal("mock signCallback 与平台 domain.callbackSign 不一致——沙箱联调会假绿;" +
-			"平台出站签名口径若变(如 #59 升 HMAC),请同步 mock 的 signCallback")
+			"平台出站签名口径若再变,请同步 mock 的 signCallback")
 	}
 
 	// 篡改任一业务字段后,平台重算签名应不匹配(证明绑定的是内容完整性、不是恒真)。
