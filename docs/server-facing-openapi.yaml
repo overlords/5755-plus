@@ -1,0 +1,113 @@
+# 5755 游戏服务端对接 API(机器可读契约)
+# 只覆盖游戏接入方的【服务端】真正对接的两件事;SDK 网关面其余端点是 SDK 内部契约、
+# 游戏不直接调(游戏客户端调 Java API com.m5755.operate.api.*,不调 HTTP),不在此(ADR-0016)。
+# 客户端接入见 docs/integration-guide.md;本契约口径以 docs/04 §1.3/§2.7.2/§4 为准。
+openapi: 3.1.0
+info:
+  title: 5755 游戏服务端对接 API
+  version: v2
+  description: |
+    游戏服务端对接 5755 平台的两件事:
+      1) 登录态校验(游戏服务端 → 平台):校验玩家上报的小号 token 真伪;
+      2) 充值回调(平台 → 游戏服务端,webhook):发货的唯一依据。
+    两件都用**每游戏的 serverKey**(serverKeyId + serverSecret)做 HMAC-SHA256(ADR-0016),
+    与客户端 SDK 焊在 AAR 里的密钥分离;游戏服务端只学一套 HMAC-SHA256 签名。
+servers:
+  - url: https://sdk.xingninghuyu.com
+    description: 生产
+  - url: https://sdk-dev.xingninghuyu.com
+    description: 联调(dev,公开测试密钥)
+components:
+  securitySchemes:
+    serverKeyHmac:
+      type: apiKey
+      in: header
+      name: X-M5755-Signature
+      description: |
+        每游戏 serverKey 的 HMAC-SHA256 入站签名(ADR-0016 / 04 §1.3)。三个签名头一起带:
+          - X-M5755-Key-Id:   serverKeyId(非密标识,平台据此选 serverSecret)
+          - X-M5755-Timestamp: Unix 秒(±300s 防重放窗口)
+          - X-M5755-Signature: HMAC-SHA256(serverSecret, canonical) 十六进制小写
+        canonical = METHOD(大写) "\n" path "\n" 字典序规范化query "\n" timestamp "\n" body(GET 为空串)。
+  schemas:
+    ApiResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        code: { type: integer }
+        reason: { type: string, description: 机器可读失败原因枚举(04 §1.2.1) }
+        message: { type: string }
+        data: { type: object }
+paths:
+  /api/sdk/v2/subaccount-sessions:
+    get:
+      operationId: checkSubaccountSession
+      summary: 游戏小号登录态校验(= U10 oauth/check)
+      description: |
+        游戏服务端校验玩家上报的小号 token 真伪(不能只信客户端传来的 account+token)。
+        serverKey **仅可调本端点**;调其他网关面端点返 403 principal_not_allowed。
+      security:
+        - serverKeyHmac: []
+      parameters:
+        - { name: gameId, in: query, required: true, schema: { type: string }, description: 当前游戏 ID }
+        - { name: account, in: query, required: true, schema: { type: string }, description: 当前游戏小号 ID }
+        - { name: X-M5755-Token, in: header, required: true, schema: { type: string }, description: 玩家小号登录令牌 token }
+      responses:
+        '200':
+          description: 接口调用成功;登录态有效性看 data.valid(HTTP 200 + success=true 不等于放行)
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResult'
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          valid: { type: boolean, description: 当前小号登录态是否有效 }
+                          account: { type: string, description: 当前游戏小号 ID(须与请求一致) }
+        '401':
+          description: 验签失败 signature_invalid / 时间戳超窗 timestamp_expired
+        '403':
+          description: serverKey 越权调非登录态校验端点 principal_not_allowed
+webhooks:
+  rechargeCallback:
+    post:
+      operationId: rechargeCallback
+      summary: 充值回调(平台 → 游戏服务端,发货唯一依据)
+      description: |
+        玩家付款成功后,5755 平台 POST 到游戏服务端配置的回调地址。游戏服务端须:
+        验签(serverSecret HMAC-SHA256)→ 金额/归属校验 → 幂等发货。
+        平台**可能重复发送**(网络抖动 / 重试 / 漏发自愈巡检),按 cpOrderId/platformOrderId 幂等去重。
+        客户端支付回调(SDK onResult)与本回调是两条独立链路,**不得混用**;发货只认本回调。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                account: { type: string, description: 当前游戏小号 ID(发货归属) }
+                platformOrderId: { type: string, description: 平台订单号(order_id 为历史兼容别名) }
+                cpOrderId: { type: string, description: 游戏订单号(下单 CP 订单号原样返回;cp_order_id 别名) }
+                amount: { type: string, description: 订单金额(元;money 别名) }
+                pay_money: { type: string, description: 实付金额(元) }
+                commodity: { type: string }
+                serverId: { type: string }
+                serverName: { type: string }
+                sign:
+                  type: string
+                  description: |
+                    HMAC-SHA256(serverSecret, 除 sign 外全字段字典序逐对 "k=v&" 含末对) 十六进制小写。
+                    serverSecret 是 HMAC 密钥、不拼进串(ADR-0016 取代旧 MD5;04 §4)。
+      responses:
+        '200':
+          description: 处理成功,平台据此止重推(返回其它或不可达 → 平台重投 / 巡检自愈)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code: { type: integer, examples: [200] }
+                  msg: { type: string, examples: ['success'] }
