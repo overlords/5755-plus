@@ -81,6 +81,7 @@ SDK 契约面收敛为 **9 条资源式路径**,以 HTTP 方法区分语义:`GET
 | `order_invalid` | 订单字段缺失/非法、订单不存在、订单归属不符 | 仅失败本次支付/查询并输出诊断,不改变账号与小号状态 | 否 |
 | `param_invalid` | 请求字段缺失或格式非法(如 `roleId="-1"`) | 仅失败本次调用并输出可采集诊断,不发起回退跳转 | 否 |
 | `signature_invalid` | 验签失败:缺签名头、keyId 未知、签名不匹配 | 按平台不可用阻断并输出诊断;不得误判为账号失效 | 否 |
+| `principal_not_allowed` | 验签通过但调用主体越权:游戏服务端 `serverKey` 调了登录态校验(`GET subaccount-sessions`)以外的端点(ADR-0016) | **面向游戏服务端调用方,SDK keyId 永不触发**;HTTP 403,与 `signature_invalid`(验签层失败)区分 | 否 |
 | `timestamp_expired` | 签名时间戳超出 ±300 秒窗口 | 按平台不可用阻断,诊断提示校时后重试 | 否 |
 | `platform_unavailable` | 平台内部错误、依赖不可用等接口级失败 | 明确阻断并提示稍后重试;**不得用本地态放行,也不误判为账号失效**(03 §2.4) | 否 |
 | `device_verification_required` | 设备首次密码登录需短信验证(里程碑 3) | 进入设备安全验证页,验证通过后自动续登;不触发账号变化 | 否 |

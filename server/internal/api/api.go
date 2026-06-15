@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"log/slog"
+	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -38,8 +39,8 @@ func NewRouter(svc *domain.Service, st *store.Store, now func() time.Time, baseU
 
 	mw := signature.Middleware(st.LookupSigningKey, now)
 
-	// SDK 契约面:全端点强制验签 + dev 故障注入中间件(生产 build 为 no-op)
-	v2 := r.Group("/api/sdk/v2", mw, devcontrol.FaultMiddleware())
+	// SDK 契约面:全端点强制验签 + 主体作用域授权 + dev 故障注入中间件(生产 build 为 no-op)
+	v2 := r.Group("/api/sdk/v2", mw, principalScope(), devcontrol.FaultMiddleware())
 	v2.GET("/config", configHandler(svc))
 	v2.POST("/sms-codes", smsCodesHandler(svc))
 	v2.POST("/account-sessions", accountSessionsHandler(svc))
@@ -53,6 +54,28 @@ func NewRouter(svc *domain.Service, st *store.Store, now func() time.Time, baseU
 	registerUCRoutes(r, svc)
 
 	return r
+}
+
+// principalScope 在验签之后做端点作用域授权(#86 / ADR-0016)。
+// 游戏服务端 serverKey(principal=='server')只许调登录态校验 GET /api/sdk/v2/subaccount-sessions,
+// 调任何其他 v2 端点一律 403 拒绝;SDK keyId(principal=='sdk' 或空)放行所有端点。
+// 验签已在前置中间件通过,故拒绝用 principal_not_allowed(授权层)而非 signature_invalid(验签层)。
+func principalScope() gin.HandlerFunc {
+	const loginCheckPath = "/api/sdk/v2/subaccount-sessions"
+	return func(c *gin.Context) {
+		if c.GetString(signature.ContextKeyPrincipal) != "server" {
+			c.Next()
+			return
+		}
+		// 游戏服务端 serverKey:仅放行登录态校验 GET。
+		if c.Request.Method == http.MethodGet && c.FullPath() == loginCheckPath {
+			c.Next()
+			return
+		}
+		result.WriteFail(c, http.StatusForbidden, result.ReasonPrincipalNotAllowed,
+			"游戏服务端密钥仅可调用登录态校验端点")
+		c.Abort()
+	}
 }
 
 // accessLog 记录每个请求的方法/路径/状态/耗时/客户端 IP;只记路径不记 query、headers 与 body,
