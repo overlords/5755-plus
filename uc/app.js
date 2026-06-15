@@ -203,6 +203,17 @@ function renderPassword() {
 }
 
 // ---------- 充值订单 ----------
+function orderRow(o) {
+  const amt = '¥' + Number(o.amount).toFixed(2);
+  const st = o.status === 'done'
+    ? '<span class="order-status done">已发放</span>'
+    : '<span class="order-status pending">处理中</span>';
+  return `<div class="order">
+    <div class="order-top"><span class="order-name">${esc(o.productName)}</span><span class="order-amount">${amt}</span></div>
+    <div class="order-bottom"><span class="order-meta">${esc(o.createdAt)} · ${esc(o.orderId)}</span>${st}</div>
+  </div>`;
+}
+
 async function renderOrders() {
   app.innerHTML = subhead('充值订单') + `<div id="orderList" class="view" style="padding-top:4px">
     <div class="card"><div class="order"><div class="sk-line skeleton" style="width:70%"></div>
@@ -214,16 +225,28 @@ async function renderOrders() {
 
   if (!data.orders.length) { list.innerHTML = '<div class="empty">暂无充值订单</div>'; return; }
 
-  list.innerHTML = '<div class="card">' + data.orders.map((o) => {
-    const amt = '¥' + Number(o.amount).toFixed(2);
-    const st = o.status === 'done'
-      ? '<span class="order-status done">已发放</span>'
-      : '<span class="order-status pending">处理中</span>';
-    return `<div class="order">
-      <div class="order-top"><span class="order-name">${esc(o.productName)}</span><span class="order-amount">${amt}</span></div>
-      <div class="order-bottom"><span class="order-meta">${esc(o.createdAt)} · ${esc(o.orderId)}</span>${st}</div>
-    </div>`;
-  }).join('') + '</div>';
+  // 首屏 + 触底续加载(游标分页;keyset 以末行 platformOrderId 为界,天然无重无漏)
+  list.innerHTML = '<div class="card" id="orderCard"></div><div id="orderSentinel" style="height:1px"></div><div id="orderMore"></div>';
+  const card = $('#orderCard'), sentinel = $('#orderSentinel'), more = $('#orderMore');
+  card.insertAdjacentHTML('beforeend', data.orders.map(orderRow).join(''));
+  let cursor = data.nextCursor, loading = false;
+  const tail = () => { more.innerHTML = '<div class="empty" style="padding:16px 0;font-size:13px">没有更多订单</div>'; };
+
+  const io = new IntersectionObserver((entries) => { if (entries[0].isIntersecting) loadMore(); });
+  const loadMore = async () => {
+    if (loading || !cursor) return;
+    loading = true;
+    more.innerHTML = '<div class="card"><div class="order"><div class="sk-line skeleton" style="width:60%"></div></div></div>';
+    let page;
+    try { page = await UC.getOrders(cursor); }
+    catch (e) { loading = false; more.innerHTML = errorBlock(loadMore); return; }
+    card.insertAdjacentHTML('beforeend', page.orders.map(orderRow).join(''));
+    cursor = page.nextCursor;
+    loading = false;
+    if (cursor) { more.innerHTML = ''; } else { io.disconnect(); tail(); }
+  };
+
+  if (cursor) io.observe(sentinel); else tail();
 }
 
 // ---------- 路由 ----------
