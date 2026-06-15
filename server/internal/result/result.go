@@ -29,6 +29,9 @@ const (
 	ReasonPlatformUnavailable       = "platform_unavailable"
 	// 里程碑 3:设备首次密码登录需短信验证(04 §1.2.1 修订随 #25 提交)。
 	ReasonDeviceVerificationRequired = "device_verification_required"
+	// #86 / ADR-0016:验签已通过但调用主体无权访问该端点(游戏服务端 serverKey 越权调登录态校验外的端点)。
+	// 与 signature_invalid 区分——验签本身有效,是授权(端点作用域)层拒绝。
+	ReasonPrincipalNotAllowed = "principal_not_allowed"
 )
 
 // ApiResult 是所有响应的统一信封。reason 在失败时必填,成功时省略(omitempty)。
