@@ -6,7 +6,9 @@
 
 ## 充值回调签名口径(联调成败的关键)
 
-**出站充值回调(平台→游戏服务端)签名 = MD5,不是 HMAC**,且**不复用** `internal/signature`(那是入站 SDK→平台的 HMAC-SHA256 + `X-M5755-Signature` 头)。真相源:`server/internal/domain/domain_m3.go:304-323 callbackSign`。
+> **⚠️ 口径已变更(ADR-0016)**:充值回调签名**已由 MD5 改为 HMAC-SHA256**(以游戏 `serverSecret` 为密钥),现行口径见 `04 §4`。以下为 **2026-06-15 沙箱实战当时的 MD5 口径**,保留作实战记录;新接入一律按 `04 §4` 的 HMAC-SHA256(实现拆 #83–#87)。
+
+**出站充值回调(平台→游戏服务端)签名 = MD5,不是 HMAC**(**历史口径**,已改 HMAC,见上),且**不复用** `internal/signature`(那是入站 SDK→平台的 HMAC-SHA256 + `X-M5755-Signature` 头)。真相源:`server/internal/domain/domain_m3.go:304-323 callbackSign`。
 
 - 算法:`MD5(待签串)` → 十六进制小写。
 - 待签串:取 body 中除 `sign` 外全部键,`sort.Strings` 字典序升序,逐对 `k=v&`(**每对都带 `&`,含最后一对**),末尾追加 `key=<secret>`(无尾随 `&`)→ 对整串 UTF-8 字节 MD5。
