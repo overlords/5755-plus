@@ -23,10 +23,12 @@ const (
 	HeaderKeyID     = "X-M5755-Key-Id"
 	HeaderSignature = "X-M5755-Signature"
 	WindowSeconds   = 300
+	// ContextKeyPrincipal:验签通过后存入 gin context 的调用主体类型('sdk'/'server',ADR-0016),供端点授权。
+	ContextKeyPrincipal = "keyPrincipal"
 )
 
-// KeyLookup 按 keyId 取签名密钥;ok=false 表示未知 keyId。
-type KeyLookup func(ctx context.Context, keyID string) (secret string, ok bool, err error)
+// KeyLookup 按 keyId 取签名密钥与主体类型('sdk'/'server',ADR-0016);ok=false 表示未知 keyId。
+type KeyLookup func(ctx context.Context, keyID string) (secret, principal string, ok bool, err error)
 
 // Canonical 构造签名原文:方法\n路径\n字典序query\n时间戳\n请求体(GET 体为空串)。
 // 规范化 query 在原始 token(k=v)层面做字典序排序,避免 encode/decode 歧义,两端一致。
@@ -84,7 +86,7 @@ func Middleware(lookup KeyLookup, now func() time.Time) gin.HandlerFunc {
 			return
 		}
 
-		secret, ok, err := lookup(c.Request.Context(), keyID)
+		secret, principal, ok, err := lookup(c.Request.Context(), keyID)
 		if err != nil {
 			result.WriteFail(c, 503, result.ReasonPlatformUnavailable, "验签密钥查询失败")
 			c.Abort()
@@ -95,6 +97,7 @@ func Middleware(lookup KeyLookup, now func() time.Time) gin.HandlerFunc {
 			c.Abort()
 			return
 		}
+		c.Set(ContextKeyPrincipal, principal) // 供端点授权(#86)区分 SDK / 游戏服务端调用者
 
 		var body []byte
 		if c.Request.Body != nil {

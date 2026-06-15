@@ -147,16 +147,17 @@ func (s *Store) GetGameConfig(ctx context.Context, gameID string) (*GameConfig, 
 
 // ---------- 验签密钥 ----------
 
-func (s *Store) LookupSigningKey(ctx context.Context, keyID string) (string, bool, error) {
-	var secret string
-	err := s.pool.QueryRow(ctx, `SELECT secret FROM signing_keys WHERE key_id=$1 AND active`, keyID).Scan(&secret)
+// LookupSigningKey 按 keyId 取密钥与调用主体类型(principal:'sdk'=SDK 网关面 / 'server'=游戏
+// 服务端 serverKey,ADR-0016);ok=false 表示未知或已停用 keyId。
+func (s *Store) LookupSigningKey(ctx context.Context, keyID string) (secret, principal string, ok bool, err error) {
+	err = s.pool.QueryRow(ctx, `SELECT secret, principal FROM signing_keys WHERE key_id=$1 AND active`, keyID).Scan(&secret, &principal)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return "", false, nil
+		return "", "", false, nil
 	}
 	if err != nil {
-		return "", false, err
+		return "", "", false, err
 	}
-	return secret, true, nil
+	return secret, principal, true, nil
 }
 
 // ---------- 短信验证码 ----------
