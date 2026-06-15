@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"html"
 	"strings"
 
@@ -104,10 +105,13 @@ document.getElementById('pay').onclick=function(){
 `
 }
 
-// jsString 把字符串安全嵌入 JS 字面量(转义引号/反斜杠/换行)。
+// jsString 把字符串安全嵌入 JS 字面量。用 encoding/json:Go 的 json 编码器会把
+// 引号/反斜杠/控制符、`<` `>` `&`(→ < 等)以及 U+2028/U+2029(JS 行终止符,
+// 不转义会断串)全部转义,产出合法 JS 字符串字面量,比手写 replacer 覆盖更全。
+// 当前仅用于平台生成的 orderID,转义为纵深防御。json.Marshal 对 string 永不出错。
 func jsString(s string) string {
-	r := strings.NewReplacer(`\`, `\\`, `'`, `\'`, "\n", `\n`, "\r", `\r`, "<", `\x3c`, ">", `\x3e`)
-	return "'" + r.Replace(s) + "'"
+	b, _ := json.Marshal(s)
+	return string(b)
 }
 
 func cashierErrorPage(msg string) string {
