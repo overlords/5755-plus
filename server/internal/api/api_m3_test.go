@@ -138,13 +138,13 @@ func TestOrderCreateIdempotentMismatchRejected(t *testing.T) {
 
 // 已支付订单同 cpOrderId 再创建 → 拒,不可重复创建。
 func TestOrderCreatePaidRejected(t *testing.T) {
-	srv, _ := setup(t)
+	srv, st := setup(t)
 	account, token, _ := loginToSubaccount(t, srv)
 	ar := doSignedH(t, srv.URL, "POST", "/api/sdk/v2/orders", "", orderBody(account, token, nil), nil)
 	orderID := ar.Data["orderId"].(string)
-	cb, _ := json.Marshal(map[string]string{"gameId": seedGame, "orderId": orderID, "mode": "成功"})
-	if r := doSignedH(t, srv.URL, "POST", "/internal/dev-control/complete-payment", "", cb, nil); !r.Success {
-		t.Fatalf("complete-payment 应成功: %+v", r)
+	// 直接置已支付(经 store,不依赖 dev 控制面 /internal/* —— 生产构建子集不注册该路由)
+	if err := st.UpdateOrderStatus(t.Context(), orderID, "已支付", "已确认"); err != nil {
+		t.Fatalf("置已支付失败: %v", err)
 	}
 	ar2 := doSignedH(t, srv.URL, "POST", "/api/sdk/v2/orders", "", orderBody(account, token, nil), nil)
 	if ar2.Success || ar2.Reason != "order_invalid" {
