@@ -19,6 +19,7 @@
 | WebView | Android 系统 WebView,SDK 自有轻量页面容器(抽屉式),不依赖完整 SDK 页面体系。 |
 | JavaScript | 开启(`setJavaScriptEnabled(true)`);禁止 JS 自动开窗(`setJavaScriptCanOpenWindowsAutomatically(false)`)。 |
 | 文件访问 | 关闭:`setAllowFileAccess(false)`、`setAllowFileAccessFromFileURLs(false)`、`setAllowUniversalAccessFromFileURLs(false)`。 |
+| JS dialog | `WebChromeClient` 仅处理 `onJsAlert`/`onJsConfirm`(`alert`/`confirm` 弹原生 `AlertDialog`,支撑远程页二次确认如退出登录;无此则 `confirm()` 默认返回 false、确认静默失效)。**不处理 `onShowFileChooser`**——文件选择与下方「文件上传」排除一致。 |
 | 排除能力 | 文件上传、媒体选择、APK 下载/安装、外部 App 跳转、客服 H5 与通用 H5 能力一律不开放。 |
 
 H5 内容边界:
