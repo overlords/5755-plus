@@ -54,17 +54,17 @@ func rolesHandler(svc *domain.Service) gin.HandlerFunc {
 }
 
 type orderReq struct {
-	GameID     string  `json:"gameId"`
-	Account    string  `json:"account"`
-	Token      string  `json:"token"`
-	Amount     float64 `json:"amount"`
-	CPOrderID  string  `json:"cpOrderId"`
-	Commodity  string  `json:"commodity"`
-	ServerID   string  `json:"serverId"`
-	ServerName string  `json:"serverName"`
-	RoleID     string  `json:"roleId"`
-	RoleName   string  `json:"roleName"`
-	RoleLevel  string  `json:"roleLevel"`
+	GameID     string `json:"gameId"`
+	Account    string `json:"account"`
+	Token      string `json:"token"`
+	Amount     string `json:"amount"`
+	CPOrderID  string `json:"cpOrderId"`
+	Commodity  string `json:"commodity"`
+	ServerID   string `json:"serverId"`
+	ServerName string `json:"serverName"`
+	RoleID     string `json:"roleId"`
+	RoleName   string `json:"roleName"`
+	RoleLevel  string `json:"roleLevel"`
 }
 
 func orderCreateHandler(svc *domain.Service, baseURL string) gin.HandlerFunc {

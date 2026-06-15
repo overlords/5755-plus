@@ -101,7 +101,7 @@ Operate.sendRoleInfo(r, new Listener() {
 
 ```java
 Order o = new Order();
-o.setAmount(328.0);
+o.setAmount("328.00"); // 金额为两位小数字符串 ^\d+\.\d{2}$,须大于 0
 o.setCpOrderId("P5755" + System.currentTimeMillis()); // CP 订单号,游戏服务端生成,需唯一
 o.setCommodity("648 元宝");
 o.setServerId("s1");

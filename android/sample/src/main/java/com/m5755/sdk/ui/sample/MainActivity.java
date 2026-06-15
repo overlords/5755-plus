@@ -150,7 +150,7 @@ public class MainActivity extends Activity {
         addButton(root, "游戏支付(recharge)", new Runnable() {
             public void run() {
                 Order o = new Order();
-                o.setAmount(328.0);
+                o.setAmount("328.00");
                 o.setCpOrderId("P5755" + System.currentTimeMillis());
                 o.setCommodity("648 元宝");
                 o.setServerId("s1");

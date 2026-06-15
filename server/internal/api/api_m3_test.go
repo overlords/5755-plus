@@ -81,7 +81,7 @@ func TestRoleReportValidation(t *testing.T) {
 
 func orderBody(account, token string, override map[string]interface{}) []byte {
 	m := map[string]interface{}{
-		"gameId": seedGame, "account": account, "token": token, "amount": 328.0,
+		"gameId": seedGame, "account": account, "token": token, "amount": "328.00",
 		"cpOrderId": "cp_" + account, "commodity": "648 元宝", "serverId": "s1", "serverName": "星河一区",
 		"roleId": "role_1", "roleName": "云起", "roleLevel": "68",
 	}
@@ -109,7 +109,11 @@ func TestOrderValidation(t *testing.T) {
 	srv, _ := setup(t)
 	account, token, _ := loginToSubaccount(t, srv)
 	for _, tc := range []map[string]interface{}{
-		{"amount": 0.0},
+		{"amount": "0.00"},      // 值非正
+		{"amount": "328"},       // 非两位小数(无小数点)
+		{"amount": "328.5"},     // 非两位小数(一位)
+		{"amount": "1000000000.00"}, // 超上限(>= 1e9)
+		{"amount": 328.0},       // 数字而非字符串(bind 失败)
 		{"cpOrderId": ""},
 		{"commodity": ""},
 		{"serverId": ""},

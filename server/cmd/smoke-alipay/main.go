@@ -137,7 +137,7 @@ func main() {
 	fmt.Println("[5] POST /orders (下单)")
 	order := dataOf(signed("POST", "/api/sdk/v2/orders", "", map[string]any{
 		"gameId": gameID, "account": account, "token": stoken,
-		"amount": 0.06, "cpOrderId": fmt.Sprintf("cp_smoke_%d", time.Now().UnixNano()),
+		"amount": "0.06", "cpOrderId": fmt.Sprintf("cp_smoke_%d", time.Now().UnixNano()),
 		"commodity": "沙箱联调 6 分", "serverId": "s1", "serverName": "星河一区",
 		"roleId": "r1", "roleName": "联调角色", "roleLevel": "1",
 	}, nil))

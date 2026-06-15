@@ -7,7 +7,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -66,7 +65,7 @@ func (svc *Service) ReportRole(ctx context.Context, in RoleInput) (*Fault, map[s
 
 type OrderInput struct {
 	GameID, Account, Token                     string
-	Amount                                     float64
+	Amount                                     string
 	CPOrderID, Commodity, ServerID, ServerName string
 	RoleID, RoleName, RoleLevel                string
 }
@@ -90,8 +89,13 @@ func (svc *Service) CreateOrder(ctx context.Context, in OrderInput, baseURL stri
 	if !ok || account != in.Account {
 		return nil, fault(401, result.ReasonSubaccountInvalid, "游戏小号登录态无效或归属不符")
 	}
-	// 字段校验(05 §2):无演示订单兜底
-	if in.Amount <= 0 || in.Amount > 1e9 {
+	// 字段校验(05 §2):无演示订单兜底。amount 为两位小数字符串 ^\d+\.\d{2}$,
+	// 值 > 0 且 < 1e9(解析仅用于范围判断,不持久化 float,存的是已校验的原字符串)。
+	if !amountRe.MatchString(in.Amount) {
+		return nil, fault(400, result.ReasonOrderInvalid, "金额非法")
+	}
+	amountVal, perr := strconv.ParseFloat(in.Amount, 64)
+	if perr != nil || amountVal <= 0 || amountVal >= 1e9 {
 		return nil, fault(400, result.ReasonOrderInvalid, "金额非法")
 	}
 	if in.CPOrderID == "" || len(in.CPOrderID) > 128 {
@@ -117,7 +121,7 @@ func (svc *Service) CreateOrder(ctx context.Context, in OrderInput, baseURL stri
 	}
 
 	orderID := "P5755" + strconv.FormatInt(svc.now().UnixNano(), 10)
-	amount := fmt.Sprintf("%.2f", in.Amount)
+	amount := in.Amount
 	err = svc.store.CreateOrder(ctx, store.Order{
 		OrderID: orderID, CPOrderID: in.CPOrderID, Account: account, GameID: in.GameID,
 		PlatformAccountID: platformAccountID, Amount: amount, Commodity: in.Commodity,
