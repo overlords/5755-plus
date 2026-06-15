@@ -1313,6 +1313,21 @@ public final class SdkUi implements FlowUi {
         });
 
         web.setAlpha(0f);
+        // JS dialog 支持:远程页 alert/confirm 弹原生对话框(uc SPA 退出登录二次确认、收银台支付提示等)。
+        // 无 WebChromeClient 时 WebView 的 confirm() 默认返回 false → 远程页的二次确认静默失效。
+        // 仅 onJsAlert/onJsConfirm;不实现 onShowFileChooser → 文件选择仍按 01 §4.2 排除。
+        web.setWebChromeClient(new android.webkit.WebChromeClient() {
+            @Override
+            public boolean onJsConfirm(android.webkit.WebView v, String u, String message, android.webkit.JsResult r) {
+                jsDialog(message, true, r);
+                return true;
+            }
+            @Override
+            public boolean onJsAlert(android.webkit.WebView v, String u, String message, android.webkit.JsResult r) {
+                jsDialog(message, false, r);
+                return true;
+            }
+        });
         web.setWebViewClient(new android.webkit.WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(android.webkit.WebView v, String u) {
@@ -1361,6 +1376,26 @@ public final class SdkUi implements FlowUi {
         });
         web.loadUrl(url);
         return container;
+    }
+
+    /** WebChromeClient 的 JS dialog → 原生 AlertDialog;confirm 有「取消」、alert 仅「确定」(取消即确定)。 */
+    private void jsDialog(String message, final boolean isConfirm, final android.webkit.JsResult result) {
+        android.app.AlertDialog.Builder b = new android.app.AlertDialog.Builder(host)
+                .setMessage(message)
+                .setPositiveButton("确定", new android.content.DialogInterface.OnClickListener() {
+                    public void onClick(android.content.DialogInterface d, int w) { result.confirm(); }
+                })
+                .setOnCancelListener(new android.content.DialogInterface.OnCancelListener() {
+                    public void onCancel(android.content.DialogInterface d) {
+                        if (isConfirm) { result.cancel(); } else { result.confirm(); }
+                    }
+                });
+        if (isConfirm) {
+            b.setNegativeButton("取消", new android.content.DialogInterface.OnClickListener() {
+                public void onClick(android.content.DialogInterface d, int w) { result.cancel(); }
+            });
+        }
+        b.show();
     }
 
     /**

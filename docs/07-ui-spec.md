@@ -425,7 +425,7 @@ smallText 行距 +2dp;hint 行距 +3dp。粗体使用 `Typeface.DEFAULT` + `Type
 
 - **容器**:左侧全高抽屉(`Gravity.LEFT`),宽 `min(屏宽, max(520dp, 屏宽×0.58))`,底色 `DRAWER_BG #F5F6F8`,elevation 12;层非模态(右侧游戏区域可操作)。**竖屏下宽度上限 80% 屏宽(§1.12)**——任何方向都必须保留右侧游戏可见条,不得全屏遮挡。
 - **关闭按钮**:`×` 26sp、色 `#747880`,44×44dp,抽屉右上角(距顶 6dp、距右 8dp)→ `onClosed("user_center")` + 关闭层(含悬浮球;游戏侧可再调 showFloatBall)。
-- **WebView**(铺满抽屉):系统 WebView;`javaScriptEnabled=true`、`javaScriptCanOpenWindowsAutomatically=false`、文件访问全关;`overScrollMode=NEVER`;**UserAgent 追加 `M5755Sdk/<版本>`**;`WebViewClient` 拦截 http/https **站内加载不外跳**;JS 桥名 **`UserCenter`**;**加载态见 §1.13**(远程页品牌动效占位 + 就绪淡入 + 失败重试;回退页瞬时不显占位)。
+- **WebView**(铺满抽屉):系统 WebView;`javaScriptEnabled=true`、`javaScriptCanOpenWindowsAutomatically=false`、文件访问全关;`overScrollMode=NEVER`;**UserAgent 追加 `M5755Sdk/<版本>`**;`WebViewClient` 拦截 http/https **站内加载不外跳**;`WebChromeClient` 仅处理 **`onJsAlert`/`onJsConfirm`**(远程页 `alert`/`confirm` 弹原生 `AlertDialog`,如退出登录二次确认——无此则 WebView `confirm()` 默认返回 false、二次确认静默失效),**不实现 `onShowFileChooser`**(文件选择仍按 `01 §4.2` 排除);JS 桥名 **`UserCenter`**;**加载态见 §1.13**(远程页品牌动效占位 + 就绪淡入 + 失败重试;回退页瞬时不显占位)。
 - **加载源(#5,见 06 §3/§5)**:用户中心 = **平台真实 H5**,以**主账户为核心**;加载 `userCenterUrl`(经 `GET /config` 下发)并以查询参数带 `platformToken`(`?token=…` / 已含 query 则 `&`)供平台页拉取主账户内容。`userCenterUrl` 由平台配置(`games.user_center_url`),**不进静态协议域**,SDK 不硬编码。
   - **未配置 URL 时**:最小回退本地容器(`loadDataWithBaseURL(null,…)`,空 baseURL),仅 `切换小号` / `退出登录` 两功能行 + 说明,**不展示游戏小号**。
 - **JS 桥协议(#5)**:仅 **`UserCenter.postAccountAction(action)`**——白名单归一:仅接受 `logout` / `switch_account` / `session_invalid`,其余归一 `unknown`;UI 线程回调 `onUserCenterAction(action)`。**已移除 `getAccountContext`**(平台 H5 凭 `platformToken` 自取主账户,SDK 不经 bridge 下发任何账户上下文)。
