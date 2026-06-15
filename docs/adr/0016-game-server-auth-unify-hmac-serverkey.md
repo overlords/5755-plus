@@ -47,3 +47,24 @@
 - **serverKey 发放**:纳入每游戏配置,与生产密钥注入一并(GA 前置)。
 - **实现细节留拆出的 issue 定**:HMAC 回调的 canonical 构造(字典序拼接 vs body 签)、防重放窗口、serverKeyId 命名空间与 SDK keyId 的区分、serverKey 轮换。
 - `integration-guide` 客户端面与服务端面**分层**:客户端 = Java API(本指南),服务端 = OpenAPI 契约 + 本指南服务端章节。
+
+## 更新(2026-06-15 grill「检查项目」):4 个延后决定收口 + 充值回调体定形
+
+经第二轮 grill,上「后果」段列为「留拆出的 issue 定」的实现细节逐条定稿,并顺带把充值回调体收敛去冗余(遵本仓「不搬运」)。
+
+**4 个延后决定的最终口径**
+
+- **canonical 构造**:回调 `sign` = `HMAC-SHA256(serverSecret, 除 sign 外全字段按键字典序逐对 "k=v&" 含末对)` hex 小写(已落地 `domain_m3.go callbackSign` + 04 §4)。
+- **serverKeyId 命名空间**:与 SDK keyId 同 `signing_keys` 表、靠 `principal` 列('sdk'/'server')区分;`principalScope()` 把 serverKey 限死只能调 `GET subaccount-sessions`,越权 403 `principal_not_allowed`(已落地 #84/#86 + 04 §1.3)。
+- **防重放窗口**:充值回调**不设**时间戳/窗口——`RedeliverPendingCallbacks` 自愈巡检会重投与首发逐字节相同的陈旧但有效回调,加窗口会与自愈互斥。**游戏服务端以 `orderId` 幂等去重**(= 重复投递与重放的唯一防线);`cpOrderId`/`amount`/`account` 仅作一致性交叉校验。入站登录态校验仍走 §1.3 ±300s 窗口——出入站不对称是自愈设计的必然,非疏漏。
+- **serverKey 轮换**:v2 默认每游戏**单把 active serverKey**;**回调体新增非密 `serverKeyId` 字段**(进签名串),游戏据它选密钥验签 → 把「换密钥」从契约变更降为配置操作、与入站 header keyId 的轮换能力对称。
+
+**充值回调体定形**
+
+- 砍下划线别名 `order_id` / `cp_order_id` / `money`(本场 grill 确认**无旧接入吃这些键**;「无旧包袱」从签名算法层延伸到字段层)。
+- `platformOrderId` → **`orderId`**(02 已立词:裸词本归平台,`platform*` 前缀只留给被小号占用的 `account` / `token`)。
+- `pay_money` → **`payAmount`**,保留作前向兼容缝(ADR-0012;v2 恒等 `amount`)。
+- 新增 `serverKeyId`(见上)。
+- 最终回调体:`account · orderId · cpOrderId · amount · payAmount · commodity · serverId · serverName · serverKeyId · sign`。
+
+**待落地改动面**:04 §4 / §2.7.2、05、`server-facing-openapi.yaml`、`integration-guide §5`、`domain_m3.go`(回调体 + per-game serverKey 选密钥签)、migrations(`orders` / `payment_notifications` 列 `platform_order_id` → `order_id`,新增 `0011`)、`mock-gameserver` / `smoke-alipay`(验签复刻 + `orderId` 幂等 + `serverKeyId` 选密钥)、Android `Results.java` / `HttpPlatformGateway.java` / `ColdStartController.java`、相关单测。02 术语已即时回写(`orderId` / `cpOrderId` / `amount` / `payAmount` / `serverKey`)。

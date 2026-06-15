@@ -9,7 +9,7 @@
 **1. 渠道回调映射(核心,推广到所有渠道)**
 渠道的**异步服务器通知(notify)= 充值回调的唯一触发源 = 物品发放依据**;渠道的**同步浏览器跳转(return)= 客户端支付回调 = 仅 UI「已交接」,绝不发货**。
 - 支付宝 `notify_url` → `POST /pay/alinotify` → 支付宝公钥 RSA2 验签 + 金额/`trade_status`/订单存在/状态=待支付/幂等校验 → `CompletePayment` → `dispatchCallback`(充值回调 → 游戏服务端)→ 回 `success` 明文 ACK 止重推。
-- 支付宝 `return_url` → 平台 sentinel `/pay/return?status=handed&orderId=<platformOrderId>`(SDK 拦截为客户端支付回调「已交接」,见 ADR-0012 / #60 sentinel 契约)。`return_url` 只在付款成功(同步)触发;取消 = 玩家返回(无 return 命中)→ SDK 保守判「未完成」。
+- 支付宝 `return_url` → 平台 sentinel `/pay/return?status=handed&orderId=<orderId>`(原 `platformOrderId`,ADR-0016 更新后改名;SDK 拦截为客户端支付回调「已交接」,见 ADR-0012 / #60 sentinel 契约)。`return_url` 只在付款成功(同步)触发;取消 = 玩家返回(无 return 命中)→ SDK 保守判「未完成」。
 - 这是 `05 §3`「客户端支付回调 ≠ 充值回调」在渠道层的落地:**同步回调可被跳过/中断/伪造,不可作发货依据**。
 
 **2. 支付宝密钥 = 公钥模式**
@@ -22,7 +22,7 @@ appid + 商户应用私钥(RSA2)+ 支付宝公钥,3 个 PEM;**非证书模式**(
 - 缺密钥 → 该路由 fail-closed(复用既有 `SIGNING_KEY` 注入模式;`bootstrap_prod.go` 校验)。
 
 **4. 构建结构**
-真收银台 + 预下单 + notify webhook 注册到**两个构建**(网关按 env 分流),**非 prod-only**(推翻 #60 原文「生产构建注册」);`/internal/dev-control/complete-payment` 保持 dev-only(注入回调的回归工具,与真支付正交);dev `/pay/{orderId}` mock 降为「未注入支付宝密钥时兜底」。映射:渠道 `out_trade_no` = 平台 `platformOrderId`(`P5755…`)。
+真收银台 + 预下单 + notify webhook 注册到**两个构建**(网关按 env 分流),**非 prod-only**(推翻 #60 原文「生产构建注册」);`/internal/dev-control/complete-payment` 保持 dev-only(注入回调的回归工具,与真支付正交);dev `/pay/{orderId}` mock 降为「未注入支付宝密钥时兜底」。映射:渠道 `out_trade_no`(支付宝渠道外部 wire 字段名,保持不动)= 平台 `orderId`(`P5755…`)。
 
 ## 考虑过的其他选项
 

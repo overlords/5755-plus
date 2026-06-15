@@ -12,10 +12,10 @@ import (
 
 // SetOrderPaymentMethod 落库收银台所选支付方式(wechat/alipay)。方式无关订单的"用什么付",
 // 仅供对账/诊断;不改 04 契约。仅在订单仍为待支付时更新(已支付订单不覆盖)。
-func (s *Store) SetOrderPaymentMethod(ctx context.Context, platformOrderID, method string) error {
+func (s *Store) SetOrderPaymentMethod(ctx context.Context, orderID, method string) error {
 	_, err := s.pool.Exec(ctx,
-		`UPDATE orders SET payment_method=$2 WHERE platform_order_id=$1 AND payment_status='待支付'`,
-		platformOrderID, method)
+		`UPDATE orders SET payment_method=$2 WHERE order_id=$1 AND payment_status='待支付'`,
+		orderID, method)
 	return err
 }
 
@@ -24,11 +24,11 @@ var ErrNotifyAlreadyProcessed = errors.New("payment notify already processed")
 
 // ClaimPaymentNotification 原子认领一笔渠道回调:首条插入成功返回 nil(可继续发放);
 // 重复回调因主键冲突返回 ErrNotifyAlreadyProcessed(直接回 ACK,不重复触发)。
-func (s *Store) ClaimPaymentNotification(ctx context.Context, channel, platformOrderID, channelTxnID string) error {
+func (s *Store) ClaimPaymentNotification(ctx context.Context, channel, orderID, channelTxnID string) error {
 	_, err := s.pool.Exec(ctx,
-		`INSERT INTO payment_notifications (channel, platform_order_id, channel_txn_id)
+		`INSERT INTO payment_notifications (channel, order_id, channel_txn_id)
 		 VALUES ($1,$2,$3)`,
-		channel, platformOrderID, channelTxnID)
+		channel, orderID, channelTxnID)
 	if err == nil {
 		return nil
 	}
@@ -40,19 +40,19 @@ func (s *Store) ClaimPaymentNotification(ctx context.Context, channel, platformO
 }
 
 // ReleasePaymentNotification 回滚认领(后续发放编排失败时,允许渠道重推再试)。
-func (s *Store) ReleasePaymentNotification(ctx context.Context, channel, platformOrderID string) error {
+func (s *Store) ReleasePaymentNotification(ctx context.Context, channel, orderID string) error {
 	_, err := s.pool.Exec(ctx,
-		`DELETE FROM payment_notifications WHERE channel=$1 AND platform_order_id=$2`,
-		channel, platformOrderID)
+		`DELETE FROM payment_notifications WHERE channel=$1 AND order_id=$2`,
+		channel, orderID)
 	return err
 }
 
 // PaymentNotificationProcessed 查询某渠道+订单是否已处理(测试/诊断用)。
-func (s *Store) PaymentNotificationProcessed(ctx context.Context, channel, platformOrderID string) (bool, error) {
+func (s *Store) PaymentNotificationProcessed(ctx context.Context, channel, orderID string) (bool, error) {
 	var exists bool
 	err := s.pool.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM payment_notifications WHERE channel=$1 AND platform_order_id=$2)`,
-		channel, platformOrderID).Scan(&exists)
+		`SELECT EXISTS(SELECT 1 FROM payment_notifications WHERE channel=$1 AND order_id=$2)`,
+		channel, orderID).Scan(&exists)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return false, nil
 	}

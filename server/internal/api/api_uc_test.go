@@ -140,7 +140,7 @@ func TestUserCenterOrders_OK(t *testing.T) {
 
 	oid := "UO_uc_" + paID // 唯一主键(随新用户 paID),避免共享 DB 重跑撞 23505
 	if err := st.CreateOrder(context.Background(), store.Order{
-		PlatformOrderID: oid, CPOrderID: "cp_" + paID, Account: first, GameID: seedGame,
+		OrderID: oid, CPOrderID: "cp_" + paID, Account: first, GameID: seedGame,
 		PlatformAccountID: paID, Amount: "648.00", Commodity: "6480 元宝", ServerID: "s1",
 	}); err != nil {
 		t.Fatalf("seed 订单失败: %v", err)

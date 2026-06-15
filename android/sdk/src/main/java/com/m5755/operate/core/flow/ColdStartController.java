@@ -491,7 +491,7 @@ public final class ColdStartController {
             done(cb, false, com.m5755.operate.provider.OperateCode.FAILURE, "支付入口非法");
             return;
         }
-        android.util.Log.i("M5755Sdk", "recharge order_created platformOrderId=" + r.platformOrderId);
+        android.util.Log.i("M5755Sdk", "recharge order_created orderId=" + r.orderId);
         // 展示支付容器(订单显示取自 Order 入参,05 §2.3)
         java.util.Map<String, String> display = new java.util.LinkedHashMap<String, String>();
         display.put("商品", order.getCommodity());
@@ -499,7 +499,7 @@ public final class ColdStartController {
         display.put("小号", account);
         display.put("区服", order.getServerName());
         display.put("角色", order.getRoleName());
-        display.put("订单号", r.platformOrderId);
+        display.put("订单号", r.orderId);
         // 客户端支付回调下沉到容器终态:暂存 cb,由 onPayContainerClosed 在收银台/订单抽屉关闭时单次 fire。
         // (旧实现在此处下单即报"已交接"——玩家还没进收银台就假报,已移除;05 §3.1 三态只在客户端流程终点回调)
         if (pendingPayCb != null) {

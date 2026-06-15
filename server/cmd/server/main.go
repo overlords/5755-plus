@@ -30,7 +30,7 @@ func main() {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	// 结构化业务/访问日志 → stdout(openrc 同步 stdout+stderr 至 /var/log/m5755-server.log);
-	// 生命周期 log.* 仍走 stderr,同文件汇合。运维可按 platformOrderId/account(脱敏)检索链路。
+	// 生命周期 log.* 仍走 stderr,同文件汇合。运维可按 orderId/account(脱敏)检索链路。
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
 
 	ctx := context.Background()

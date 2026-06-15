@@ -111,7 +111,7 @@ func (r *payReceiver) count() int {
 	return len(r.hits)
 }
 
-// createPaidOrder 走 SDK 链建一个待支付订单,返回 platformOrderId + 应收金额(元)。
+// createPaidOrder 走 SDK 链建一个待支付订单,返回 orderId + 应收金额(元)。
 func createPaidOrder(t *testing.T, srv *httptest.Server) (orderID, amount string) {
 	t.Helper()
 	account, token, _ := loginToSubaccount(t, srv)
@@ -119,7 +119,7 @@ func createPaidOrder(t *testing.T, srv *httptest.Server) (orderID, amount string
 	if !ar.Success {
 		t.Fatalf("建单失败: %s", ar.Message)
 	}
-	return ar.Data["platformOrderId"].(string), ar.Data["amount"].(string)
+	return ar.Data["orderId"].(string), ar.Data["amount"].(string)
 }
 
 // ---------- 支付宝异步通知接收端(端到端) ----------

@@ -309,7 +309,7 @@ public class ColdStartControllerTest {
     public void rechargeOKShowsPayDrawerFromInput() {
         Fixture f = loggedInWithSubaccount();
         f.gw.orderCreate.ok = true;
-        f.gw.orderCreate.platformOrderId = "P5755x";
+        f.gw.orderCreate.orderId = "P5755x";
         f.gw.orderCreate.paymentUrl = "https://sdk-dev/pay/P5755x";
         f.c.recharge(validOrder(), null);
         assertTrue(f.ui.calls.contains("showPayDrawer"));
@@ -344,7 +344,7 @@ public class ColdStartControllerTest {
         // 口径漏洞回归:下单成功不得立即报"已交接"——cb 须挂起到容器终态(05 §3.1)
         Fixture f = loggedInWithSubaccount();
         f.gw.orderCreate.ok = true;
-        f.gw.orderCreate.platformOrderId = "P5755x";
+        f.gw.orderCreate.orderId = "P5755x";
         f.gw.orderCreate.paymentUrl = "https://sdk-dev/pay/P5755x";
         final int[] calls = {0};
         f.c.recharge(validOrder(), (s, code, m) -> calls[0]++);
@@ -356,7 +356,7 @@ public class ColdStartControllerTest {
     public void payContainerClosedHandedFiresHandedOff() {
         Fixture f = loggedInWithSubaccount();
         f.gw.orderCreate.ok = true;
-        f.gw.orderCreate.platformOrderId = "P5755x";
+        f.gw.orderCreate.orderId = "P5755x";
         f.gw.orderCreate.paymentUrl = "https://sdk-dev/pay/P5755x";
         final int[] calls = {0};
         final boolean[] ok = {false};
@@ -374,7 +374,7 @@ public class ColdStartControllerTest {
     public void payContainerClosedNotHandedFiresNotCompleted() {
         Fixture f = loggedInWithSubaccount();
         f.gw.orderCreate.ok = true;
-        f.gw.orderCreate.platformOrderId = "P5755x";
+        f.gw.orderCreate.orderId = "P5755x";
         f.gw.orderCreate.paymentUrl = "https://sdk-dev/pay/P5755x";
         final int[] calls = {0};
         final boolean[] ok = {true};
@@ -393,7 +393,7 @@ public class ColdStartControllerTest {
         // 单次触发:多次终态信号(返回键与未来 sentinel 竞合)只回调一次
         Fixture f = loggedInWithSubaccount();
         f.gw.orderCreate.ok = true;
-        f.gw.orderCreate.platformOrderId = "P5755x";
+        f.gw.orderCreate.orderId = "P5755x";
         f.gw.orderCreate.paymentUrl = "https://sdk-dev/pay/P5755x";
         final int[] calls = {0};
         f.c.recharge(validOrder(), (s, c, m) -> calls[0]++);

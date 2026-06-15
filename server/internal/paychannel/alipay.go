@@ -79,7 +79,7 @@ func NewAlipaySigner(cfg AlipayConfig) (*AlipaySigner, error) {
 
 // AlipayWapInput 手机网站支付预下单入参(方式无关订单 → 渠道侧字段映射)。
 type AlipayWapInput struct {
-	OutTradeNo  string // = platformOrderId
+	OutTradeNo  string // = orderId
 	Subject     string // 商品标题
 	TotalAmount string // 金额(元,两位小数字符串,如 "328.00")
 }
