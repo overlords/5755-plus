@@ -1,6 +1,6 @@
 # 5755 SDK v2 接入指南
 
-面向游戏接入方的最小接入说明。本指南**自包含**,只覆盖对外公开 API `com.m5755.operate.api.*` 与公开错误码 `com.m5755.operate.provider.OperateCode`,以及游戏服务端需实现的**充值回调对接**(§5);接入方按本指南即可完成客户端接入与服务端发货。
+面向游戏接入方的最小接入说明。本指南**自包含**,只覆盖对外公开 API `com.m5755.operate.api.*` 与公开错误码 `com.m5755.operate.provider.OperateCode`,以及**游戏服务端对接**(§5:登录态校验 + 充值回调);接入方按本指南即可完成客户端接入与服务端对接。
 
 ## 1. 交付物
 
@@ -71,7 +71,7 @@ Operate.login(activity, new DataListener<User>() {
         if (success) {
             String account = user.getAccount(); // 当前游戏小号 ID
             String token = user.getToken();     // 小号登录令牌
-            // 用 account+token 到游戏服务端做登录态校验
+            // 用 account+token 到游戏服务端做登录态校验(游戏服务端校验见 §5.1)
         }
     }
 });
@@ -121,7 +121,7 @@ Operate.recharge(activity, o, new Listener() {
 > - `success=false`、`code=CANCELED(9)` —— **未完成**:支付被取消或未确认;
 > - 其它 `code` —— 失败(未登录/入参非法/门禁等,见 §4)。
 >
-> **`onResult` 仅用于 UI 提示与本地流程(如关闭等待框、引导重试),绝不是发货依据。** 物品发放的**唯一依据**是平台→游戏服务端的**充值回调**(§5)。`onResult=已交接` 也**不**代表已到账。交付 AAR 不内置任何服务端验签/发放逻辑。
+> **`onResult` 仅用于 UI 提示与本地流程(如关闭等待框、引导重试),绝不是发货依据。** 物品发放的**唯一依据**是平台→游戏服务端的**充值回调**(§5.2)。`onResult=已交接` 也**不**代表已到账。交付 AAR 不内置任何服务端验签/发放逻辑。
 
 ### 3.6 切换小号 / 退出 / 销毁
 
@@ -155,7 +155,20 @@ SDK 对外只暴露这组粗粒度码(共 7 个,平台侧的细分原因仅 SDK 
 | `CANCELED` | 9 | 用户取消 |
 | `PARAM_ERROR` | 10 | 入参非法 |
 
-## 5. 充值回调对接(游戏服务端)
+## 5. 游戏服务端对接
+
+游戏服务端有两件事对接 5755,都用**每游戏的 `serverKey`**(`serverKeyId + serverSecret`,5755 随接入材料下发)做 **HMAC-SHA256** 签名/验签(ADR-0016,与客户端 SDK 焊死的密钥分离;游戏服务端只学这一套签名)。机器可读契约见 `docs/server-facing-openapi.yaml`。
+
+### 5.1 登录态校验(serverKey)
+
+客户端 `login` 拿到的 `account`+`token`(§3.3)传到游戏服务端后,游戏服务端**必须向 5755 校验其真伪**——不能只信客户端传来的值(防伪造登录态):
+
+- **接口**:`GET /api/sdk/v2/subaccount-sessions`(生产 `https://sdk.xingninghuyu.com`,联调 `https://sdk-dev.xingninghuyu.com`)
+- **请求**:query `gameId`、`account`;header `X-M5755-Token`=玩家小号 `token`
+- **鉴权**:用 `serverKey` 按 HMAC-SHA256 + 时间戳防重放签名,三个签名头 `X-M5755-Key-Id`(=`serverKeyId`)、`X-M5755-Timestamp`、`X-M5755-Signature`(算法见 `server-facing-openapi.yaml` / 对接材料)。`serverKey` **仅可调本端点**,调其他端点返 `principal_not_allowed`(403)
+- **响应**:`data.valid=true` 才算登录态有效(HTTP 200 不等于放行);`data.account` 须与传入 `account` 一致,否则按无效处理
+
+### 5.2 充值回调
 
 **这是发货的唯一依据。** 客户端 `recharge` 的 `onResult`(§3.5)只表示客户端流程进展、不代表到账;玩家付款成功后,5755 平台向**游戏服务端**发起充值回调,游戏服务端据此发货。
 
@@ -171,9 +184,9 @@ SDK 对外只暴露这组粗粒度码(共 7 个,平台侧的细分原因仅 SDK 
   | `pay_money` | 实付金额(元) |
   | `commodity` | 商品名称 |
   | `serverId` / `serverName` | 区服字段 |
-  | `sign` | 平台签名(规则与密钥随接入对接材料提供) |
+  | `sign` | 平台 HMAC-SHA256 签名(口径见下「验签」;`serverSecret` 每游戏独立) |
 
-- **验签**:游戏服务端须用约定密钥校验 `sign`,校验不过一律拒绝。`sign` 生成规则与校验密钥由 5755 随接入对接材料下发(每游戏独立密钥)。
+- **验签**(HMAC-SHA256,ADR-0016):游戏服务端用每游戏的 `serverSecret` 复算 `sign`——取回调体除 `sign` 外全字段按字段名字典序升序、逐对拼 `键=值&`(含最后一对),以 `serverSecret` 为 **HMAC 密钥**对该串做 HMAC-SHA256、十六进制小写,与回调 `sign` 比对,不过一律拒绝。`serverSecret` 是 HMAC 密钥、**不拼进串**(取代旧 MD5);每游戏独立、随接入材料下发(dev 联调默认 `m5755-dev-callback-secret-v1`)。
 - **金额 / 归属校验**:回调的 `amount` 须与游戏侧订单金额一致;`account` / `cpOrderId` 须与游戏侧订单记录归属一致。任一不符必须失败,不得发货。
 - **幂等发货**:同一笔合法充值回调只发货一次。平台**可能重复发送**(网络抖动 / 投递重试 / 平台补偿巡检),游戏服务端须按 `cpOrderId`(或 `platformOrderId`)幂等去重,重复回调只确认、不重复交付。
 - **响应**:游戏服务端处理成功须返回(平台据此止重推):
@@ -191,7 +204,7 @@ SDK 对外只暴露这组粗粒度码(共 7 个,平台侧的细分原因仅 SDK 
 - 自动登录失败会**回退展示登录窗口**,不以失败码结束;接入方不要用本地登录态替代服务端校验放行。
 - 游戏小号一律由平台返回,**不可凭空造演示小号**;列表为空属平台侧异常。
 - 渠道异常一律回退 `default` 且不阻断登录。
-- 发货只认充值回调(§5),客户端任何支付状态都不作发货依据。
+- 发货只认充值回调(§5.2),客户端任何支付状态都不作发货依据。
 - 诊断日志 tag = `M5755Sdk`。
 
 ## 7. 诊断
