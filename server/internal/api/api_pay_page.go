@@ -12,7 +12,7 @@ import (
 // 收银台在玩家从渠道返回后(无法可靠探知,故由"我已完成支付"按钮辅助)导航到 status=handed。
 // status 仅驱动 SDK UI 口径,SDK 绝不据此发货(#60 评论 sentinel 契约第 4 条)。
 func renderCashierPage(co *domain.CashierOrder) string {
-	orderID := html.EscapeString(co.PlatformOrderID)
+	orderID := html.EscapeString(co.OrderID)
 	amount := html.EscapeString(co.Amount)
 	commodity := html.EscapeString(co.Commodity)
 

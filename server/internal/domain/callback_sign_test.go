@@ -13,15 +13,16 @@ import (
 func TestCallbackSignHMAC(t *testing.T) {
 	const secret = "m5755-dev-callback-secret-v1"
 	params := map[string]string{
-		"account":         "s_abc123",
-		"platformOrderId": "P5755123456789",
-		"cpOrderId":       "cp_order_1",
-		"amount":          "6.00",
-		"serverName":      "星河一区", // 中文 UTF-8 字节参与签名
+		"account":     "s_abc123",
+		"orderId":     "P5755123456789",
+		"cpOrderId":   "cp_order_1",
+		"amount":      "6.00",
+		"serverKeyId": "dev-server-key",
+		"serverName":  "星河一区", // 中文 UTF-8 字节参与签名
 	}
 
 	// 独立复算 canonical 串 = 字典序 k=v& 逐对(含末尾 &),不含 key=secret。
-	canonical := "account=s_abc123&amount=6.00&cpOrderId=cp_order_1&platformOrderId=P5755123456789&serverName=星河一区&"
+	canonical := "account=s_abc123&amount=6.00&cpOrderId=cp_order_1&orderId=P5755123456789&serverKeyId=dev-server-key&serverName=星河一区&"
 	mac := hmac.New(sha256.New, []byte(secret))
 	mac.Write([]byte(canonical))
 	want := hex.EncodeToString(mac.Sum(nil))

@@ -92,15 +92,15 @@ type UCOrder struct {
 	Status      string
 }
 
-// ListOrders 返回主账户充值订单(keyset 游标分页,按 created_at DESC, platform_order_id DESC)。
-// cursor 为上一页末行的 platform_order_id;空串取首页。返回 (orders, nextCursor, err);nextCursor 空表示无更多。
+// ListOrders 返回主账户充值订单(keyset 游标分页,按 created_at DESC, order_id DESC)。
+// cursor 为上一页末行的 order_id;空串取首页。返回 (orders, nextCursor, err);nextCursor 空表示无更多。
 func (s *Store) ListOrders(ctx context.Context, platformAccountID, cursor string, limit int) ([]UCOrder, string, error) {
-	rows, err := s.pool.Query(ctx, `SELECT platform_order_id, commodity, amount::text, payment_status, created_at
+	rows, err := s.pool.Query(ctx, `SELECT order_id, commodity, amount::text, payment_status, created_at
 		FROM orders
 		WHERE platform_account_id=$1
-		  AND ($2='' OR (created_at, platform_order_id) <
-		       (SELECT created_at, platform_order_id FROM orders WHERE platform_order_id=$2))
-		ORDER BY created_at DESC, platform_order_id DESC
+		  AND ($2='' OR (created_at, order_id) <
+		       (SELECT created_at, order_id FROM orders WHERE order_id=$2))
+		ORDER BY created_at DESC, order_id DESC
 		LIMIT $3`, platformAccountID, cursor, limit+1)
 	if err != nil {
 		return nil, "", err

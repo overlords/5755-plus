@@ -49,27 +49,27 @@ func (s *Store) SubaccountByToken(ctx context.Context, token, gameID string) (ac
 // ---------- #22 订单 ----------
 
 type Order struct {
-	PlatformOrderID, CPOrderID, Account, GameID, PlatformAccountID string
-	Amount                                                         string
-	Commodity, ServerID, ServerName, RoleID, RoleName, RoleLevel   string
-	PaymentStatus, CallbackStatus                                  string
+	OrderID, CPOrderID, Account, GameID, PlatformAccountID       string
+	Amount                                                       string
+	Commodity, ServerID, ServerName, RoleID, RoleName, RoleLevel string
+	PaymentStatus, CallbackStatus                                string
 }
 
 func (s *Store) CreateOrder(ctx context.Context, o Order) error {
 	_, err := s.pool.Exec(ctx, `INSERT INTO orders
-		(platform_order_id, cp_order_id, account, game_id, platform_account_id, amount, commodity, server_id, server_name, role_id, role_name, role_level)
+		(order_id, cp_order_id, account, game_id, platform_account_id, amount, commodity, server_id, server_name, role_id, role_name, role_level)
 		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-		o.PlatformOrderID, o.CPOrderID, o.Account, o.GameID, o.PlatformAccountID, o.Amount,
+		o.OrderID, o.CPOrderID, o.Account, o.GameID, o.PlatformAccountID, o.Amount,
 		o.Commodity, o.ServerID, o.ServerName, o.RoleID, o.RoleName, o.RoleLevel)
 	return err
 }
 
-func (s *Store) GetOrder(ctx context.Context, platformOrderID string) (*Order, error) {
+func (s *Store) GetOrder(ctx context.Context, orderID string) (*Order, error) {
 	var o Order
-	err := s.pool.QueryRow(ctx, `SELECT platform_order_id, cp_order_id, account, game_id, platform_account_id,
+	err := s.pool.QueryRow(ctx, `SELECT order_id, cp_order_id, account, game_id, platform_account_id,
 		amount::text, commodity, server_id, server_name, role_id, role_name, role_level, payment_status, callback_status
-		FROM orders WHERE platform_order_id=$1`, platformOrderID).Scan(
-		&o.PlatformOrderID, &o.CPOrderID, &o.Account, &o.GameID, &o.PlatformAccountID, &o.Amount,
+		FROM orders WHERE order_id=$1`, orderID).Scan(
+		&o.OrderID, &o.CPOrderID, &o.Account, &o.GameID, &o.PlatformAccountID, &o.Amount,
 		&o.Commodity, &o.ServerID, &o.ServerName, &o.RoleID, &o.RoleName, &o.RoleLevel, &o.PaymentStatus, &o.CallbackStatus)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
@@ -80,8 +80,8 @@ func (s *Store) GetOrder(ctx context.Context, platformOrderID string) (*Order, e
 	return &o, nil
 }
 
-func (s *Store) GetOrderForGame(ctx context.Context, platformOrderID, gameID string) (*Order, error) {
-	o, err := s.GetOrder(ctx, platformOrderID)
+func (s *Store) GetOrderForGame(ctx context.Context, orderID, gameID string) (*Order, error) {
+	o, err := s.GetOrder(ctx, orderID)
 	if err != nil {
 		return nil, err
 	}
@@ -91,19 +91,19 @@ func (s *Store) GetOrderForGame(ctx context.Context, platformOrderID, gameID str
 	return o, nil
 }
 
-func (s *Store) UpdateOrderStatus(ctx context.Context, platformOrderID, paymentStatus, callbackStatus string) error {
-	_, err := s.pool.Exec(ctx, `UPDATE orders SET payment_status=$2, callback_status=$3 WHERE platform_order_id=$1`,
-		platformOrderID, paymentStatus, callbackStatus)
+func (s *Store) UpdateOrderStatus(ctx context.Context, orderID, paymentStatus, callbackStatus string) error {
+	_, err := s.pool.Exec(ctx, `UPDATE orders SET payment_status=$2, callback_status=$3 WHERE order_id=$1`,
+		orderID, paymentStatus, callbackStatus)
 	return err
 }
 
 // ListUndeliveredPaidOrders 取已支付但充值回调未送达(投递失败/投递中)的订单,供平台侧重投巡检。
 // 渠道确认支付后即 ACK 止重推,出站充值回调的最终送达由本巡检补偿,不依赖渠道重推。
 func (s *Store) ListUndeliveredPaidOrders(ctx context.Context, limit int) ([]Order, error) {
-	rows, err := s.pool.Query(ctx, `SELECT platform_order_id, cp_order_id, account, game_id, platform_account_id,
+	rows, err := s.pool.Query(ctx, `SELECT order_id, cp_order_id, account, game_id, platform_account_id,
 		amount::text, commodity, server_id, server_name, role_id, role_name, role_level, payment_status, callback_status
 		FROM orders WHERE payment_status='已支付' AND callback_status IN ('投递失败','投递中')
-		ORDER BY platform_order_id LIMIT $1`, limit)
+		ORDER BY order_id LIMIT $1`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +111,7 @@ func (s *Store) ListUndeliveredPaidOrders(ctx context.Context, limit int) ([]Ord
 	var out []Order
 	for rows.Next() {
 		var o Order
-		if err := rows.Scan(&o.PlatformOrderID, &o.CPOrderID, &o.Account, &o.GameID, &o.PlatformAccountID, &o.Amount,
+		if err := rows.Scan(&o.OrderID, &o.CPOrderID, &o.Account, &o.GameID, &o.PlatformAccountID, &o.Amount,
 			&o.Commodity, &o.ServerID, &o.ServerName, &o.RoleID, &o.RoleName, &o.RoleLevel, &o.PaymentStatus, &o.CallbackStatus); err != nil {
 			return nil, err
 		}

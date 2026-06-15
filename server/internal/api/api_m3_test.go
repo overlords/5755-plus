@@ -96,7 +96,7 @@ func TestOrderCreateOK(t *testing.T) {
 	srv, _ := setup(t)
 	account, token, _ := loginToSubaccount(t, srv)
 	ar := doSignedH(t, srv.URL, "POST", "/api/sdk/v2/orders", "", orderBody(account, token, nil), nil)
-	if !ar.Success || ar.Data["platformOrderId"] == nil || ar.Data["paymentUrl"] == nil {
+	if !ar.Success || ar.Data["orderId"] == nil || ar.Data["paymentUrl"] == nil {
 		t.Fatalf("支付创建应返回订单号+paymentUrl: %+v", ar)
 	}
 	pu, _ := ar.Data["paymentUrl"].(string)
@@ -193,7 +193,7 @@ func TestCallbackDispatchAndIdempotentRepush(t *testing.T) {
 
 	account, token, _ := loginToSubaccount(t, srv)
 	ar := doSignedH(t, srv.URL, "POST", "/api/sdk/v2/orders", "", orderBody(account, token, nil), nil)
-	orderID := ar.Data["platformOrderId"].(string)
+	orderID := ar.Data["orderId"].(string)
 
 	// complete-payment 成功 → 接收端收到回调
 	cb, _ := json.Marshal(map[string]string{"gameId": seedGame, "orderId": orderID, "mode": "成功"})
@@ -204,8 +204,10 @@ func TestCallbackDispatchAndIdempotentRepush(t *testing.T) {
 		t.Fatalf("接收端应收到 1 次回调,得 %d", rec.count())
 	}
 	got := rec.hits[0]
-	if got["account"] != account || got["cpOrderId"] != "cp_"+account || got["money"] != got["amount"] {
-		t.Fatalf("回调字段/双命名不一致: %+v", got)
+	// 回调体定形(ADR-0016):orderId/payAmount/serverKeyId,payAmount 恒等 amount。
+	if got["account"] != account || got["orderId"] != orderID || got["cpOrderId"] != "cp_"+account ||
+		got["payAmount"] != got["amount"] || got["serverKeyId"] != "dev-server-key" {
+		t.Fatalf("回调字段不符定形: %+v", got)
 	}
 	if !domain.VerifyCallbackSign(got, "m5755-dev-callback-secret-v1") {
 		t.Fatalf("回调签名校验失败")
@@ -236,7 +238,7 @@ func TestRedeliverPendingCallbacksHealsFailedDelivery(t *testing.T) {
 
 	account, token, _ := loginToSubaccount(t, srv)
 	ar := doSignedH(t, srv.URL, "POST", "/api/sdk/v2/orders", "", orderBody(account, token, nil), nil)
-	orderID := ar.Data["platformOrderId"].(string)
+	orderID := ar.Data["orderId"].(string)
 
 	// complete-payment:回调投递失败 → 订单卡在 已支付/投递失败(漏发前置)
 	cb, _ := json.Marshal(map[string]string{"gameId": seedGame, "orderId": orderID, "mode": "成功"})
@@ -268,7 +270,7 @@ func TestCallbackTimeoutRepush(t *testing.T) {
 	t.Cleanup(func() { _ = st.SetCallbackURL(t.Context(), seedGame, "") })
 	account, token, _ := loginToSubaccount(t, srv)
 	ar := doSignedH(t, srv.URL, "POST", "/api/sdk/v2/orders", "", orderBody(account, token, nil), nil)
-	orderID := ar.Data["platformOrderId"].(string)
+	orderID := ar.Data["orderId"].(string)
 	cb, _ := json.Marshal(map[string]string{"gameId": seedGame, "orderId": orderID, "mode": "超时"})
 	doSignedH(t, srv.URL, "POST", "/internal/dev-control/complete-payment", "", cb, nil)
 	if rec.count() < 2 {

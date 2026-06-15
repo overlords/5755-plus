@@ -390,7 +390,7 @@ public final class HttpPlatformGateway implements PlatformGateway {
             out.reason = r.reason;
             out.message = r.message;
             if (r.data != null) {
-                out.platformOrderId = r.data.optString("platformOrderId", "");
+                out.orderId = r.data.optString("orderId", "");
                 out.paymentUrl = r.data.optString("paymentUrl", "");
                 out.account = r.data.optString("account", "");
                 out.amount = r.data.optString("amount", "");

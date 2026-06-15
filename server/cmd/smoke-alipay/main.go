@@ -141,10 +141,10 @@ func main() {
 		"commodity": "沙箱联调 6 分", "serverId": "s1", "serverName": "星河一区",
 		"roleId": "r1", "roleName": "联调角色", "roleLevel": "1",
 	}, nil))
-	pid := str(order, "platformOrderId")
-	fmt.Printf("    platformOrderId=%q\n", pid)
+	pid := str(order, "orderId")
+	fmt.Printf("    orderId=%q\n", pid)
 	if pid == "" {
-		fmt.Println("    未拿到 platformOrderId。停。")
+		fmt.Println("    未拿到 orderId。停。")
 		os.Exit(1)
 	}
 

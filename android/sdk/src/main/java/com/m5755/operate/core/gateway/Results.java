@@ -116,7 +116,7 @@ public final class Results {
         public boolean ok;
         public String reason;
         public String message;
-        public String platformOrderId;
+        public String orderId;
         public String paymentUrl;
         public String account;
         public String amount;

@@ -100,7 +100,13 @@
 
 **订单**：玩家为游戏商品发起的支付请求，关联金额、商品、CP 订单号、当前小号、区服和角色等显式字段。不称充值、payment。
 
-**CP 订单号**：游戏服务端在调用支付前生成的唯一订单标识；平台在充值回调中返回，游戏侧校验归属和金额。不写作 mark。
+**订单号（`orderId`）**：平台为一笔订单签发的全局唯一标识（`orders` 表主键，= 渠道 `out_trade_no`）。是**充值回调幂等去重的权威键**（游戏服务端对同一 `orderId` 只发一次货）、支付链路与平台日志检索键。规范名 `orderId`，**不写作 `platformOrderId`**：「订单」裸词本就归平台（游戏侧才限定为「CP 订单号」），无需 `platform` 前缀；该前缀只保留给裸词已被小号占用的字段（`platformAccountId` / `platformToken`），不泛用。
+
+**CP 订单号（`cpOrderId`）**：游戏服务端在调用支付前生成的订单标识（游戏侧自保唯一，平台不强制约束）；平台在充值回调中原样返回，游戏侧用于归属与金额**交叉校验**，**不作幂等去重键**（去重用 `orderId`）。不写作 mark。
+
+**订单金额（`amount`）/ 实付金额（`payAmount`）**：`amount` 为订单应付金额（商品价格，规范裸词）；`payAmount` 为玩家实付金额（变体，故带限定）。v2 **无折扣、无券（`01 §4.2` 永久排除）、无余额抵扣（ADR-0012 范围外）**，故 `payAmount` 当前**恒等于 `amount`**；保留 `payAmount` 作**前向兼容缝**（ADR-0012），待将来折扣 / 余额能力经 `01 §5` 评审落地时承载真实实付语义。不写作 `money` / `pay_money`（旧下划线形已退役）。
+
+**serverKey（游戏服务端密钥：`serverKeyId` + `serverSecret`）**：平台后台**按游戏**发放给**游戏服务端**（独立主体，非 SDK）的一对密钥（ADR-0016）。`serverKeyId` 是非密标识、`serverSecret` 是 HMAC-SHA256 密钥；同一把两用途：① 游戏服务端调登录态校验（`GET subaccount-sessions`）的入站签名（§1.3 同算法 + ±300s 窗口）；② 平台发**充值回调**时用 `serverSecret` 签，回调体带 `serverKeyId` 标明所用密钥（供游戏选密钥验签、留优雅轮换路）。**不焊 AAR**（区别于 SDK 网关面焊死的 keyId）；v2 默认每游戏**单把 active key**，存于 `signing_keys` 表 `principal='server'`，越权调登录态校验以外端点返 `principal_not_allowed`。区别于 `platformToken`（玩家会话令牌、Bearer）、SDK keyId（焊 AAR）。
 
 **支付订单入参**：接入方通过 SDK 支付订单对象传入的字段集合；支付 UI 展示和支付请求必须以这些字段为准。
 

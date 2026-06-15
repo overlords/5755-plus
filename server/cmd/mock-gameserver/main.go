@@ -6,9 +6,9 @@
 //  2. 用与平台 dispatchCallback **逐字节一致**的方式验签:
 //     算法 HMAC-SHA256(ADR-0016)、密钥(HMAC key)来自 -secret(默认 dev 口径 m5755-dev-callback-secret-v1)、
 //     待签串 = 除 sign 外全部键按字典序 `k=v&...`(末尾对仍带 &;secret 作 HMAC 密钥、不拼进串)(详见 signCallback)。
-//  3. 验签通过 → 幂等"发放"并回游戏侧确认体 {"code":200,"msg":"success"}(平台据此判"已确认")。
+//  3. 验签通过 → 按 orderId 幂等"发放"并回游戏侧确认体 {"code":200,"msg":"success"}(平台据此判"已确认")。
 //     验签失败 → 回 4xx 并记录(平台据此判"投递失败",会进入重投巡检)。
-//  4. 每笔落结构化日志(订单号、CP 订单号、金额、验签结果、幂等命中)。
+//  4. 每笔落结构化日志(orderId、cpOrderId、金额、serverKeyId、验签结果、幂等命中)。
 //
 // 设计取舍:本程序**只用标准库**,不 import internal/domain —— 因为 internal/domain
 // 会传递性拖入 pgx/gin/bcrypt 等 DB/Web 依赖,与"独立可部署的 mock 游戏服务端"相悖。
@@ -75,8 +75,23 @@ type mockGameServer struct {
 	log    *slog.Logger
 
 	mu        sync.Mutex
-	delivered map[string]string // 幂等账本:平台订单号 -> 首次发放结果(重复回调只确认、不重复交付)
+	delivered map[string]string // 幂等账本:orderId -> 首次发放结果(重复回调只确认、不重复交付)
 }
+
+// secretFor 据回调体 serverKeyId 选对应 serverSecret 验签(ADR-0016:为优雅轮换留路;接收方据
+// serverKeyId 选密钥,把"换密钥"从契约变更降为配置)。dev 单把 serverKey(dev-server-key),
+// 故据它选密钥即返回 -secret 配的 dev secret;空 serverKeyId 也回退该 secret 以兼容(真实游戏方
+// 的 per-game 多 serverKey 选择归 #59,届时改为按 serverKeyId 查多把密钥)。ok=false 表示未知 keyId。
+func (s *mockGameServer) secretFor(serverKeyID string) (secret string, ok bool) {
+	if serverKeyID == "" || serverKeyID == devServerKeyID {
+		return s.secret, true
+	}
+	return "", false
+}
+
+// devServerKeyID 是 dev 路径固定 serverKeyId(平台 migration 0010 seed 的 dev-server-key,
+// 其 secret 与平台 callbackSecret 一致 m5755-dev-callback-secret-v1)。
+const devServerKeyID = "dev-server-key"
 
 // handleCallback 接收平台充值回调:验签 → 反欺诈口径外的最小校验 → 幂等"发放" → ACK。
 func (s *mockGameServer) handleCallback(w http.ResponseWriter, r *http.Request) {
@@ -92,7 +107,9 @@ func (s *mockGameServer) handleCallback(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// 平台 dispatchCallback 发的是单层 JSON 对象,所有值皆 string(domain_m3.go:251-257)。
+	// 平台 dispatchCallback 发的是单层 JSON 对象,所有值皆 string(domain_m3.go dispatchCallback)。
+	// 回调体定形(ADR-0016,10 字段全 camelCase):
+	//   account · orderId · cpOrderId · amount · payAmount · commodity · serverId · serverName · serverKeyId · sign
 	var payload map[string]string
 	if err := json.Unmarshal(body, &payload); err != nil {
 		s.log.Warn("callback_unmarshal_failed", "err", err.Error(), "rawLen", len(body))
@@ -100,56 +117,67 @@ func (s *mockGameServer) handleCallback(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	platformOrderID := payload["platformOrderId"]
+	orderID := payload["orderId"]
 	cpOrderID := payload["cpOrderId"]
 	amount := payload["amount"]
 	account := payload["account"]
+	serverKeyID := payload["serverKeyId"]
 
-	// 1) 验签:逐字节复刻平台 callbackSign。失败必须回 4xx,平台据此判"投递失败"并重投。
-	expected := signCallback(payload, s.secret)
+	// 1) 验签:逐字节复刻平台 callbackSign。据回调体 serverKeyId 选 serverSecret(为优雅轮换留路);
+	//    dev 单把 serverKey(dev-server-key),据它选密钥即用 dev secret。验签失败必须回 4xx,
+	//    平台据此判"投递失败"并重投。
+	secret, knownKey := s.secretFor(serverKeyID)
+	if !knownKey {
+		s.log.Warn("callback_unknown_server_key",
+			"orderId", orderID, "cpOrderId", cpOrderID, "serverKeyId", serverKeyID, "signOK", false)
+		s.writeFail(w, http.StatusUnauthorized, "unknown_server_key")
+		return
+	}
+	expected := signCallback(payload, secret)
 	got := payload["sign"]
 	if !constTimeEqual(got, expected) {
 		s.log.Warn("callback_sign_invalid",
-			"platformOrderId", platformOrderID, "cpOrderId", cpOrderID,
+			"orderId", orderID, "cpOrderId", cpOrderID, "serverKeyId", serverKeyID,
 			"account", maskAccount(account), "amount", amount, "signOK", false)
 		s.writeFail(w, http.StatusUnauthorized, "sign_invalid")
 		return
 	}
 
 	// 2) 最小契约校验(订单号/金额必须随回调带到,游戏侧据此归属与对账;真实游戏服务端
-	//    还应做金额与本地订单一致、account+cpOrderId 归属校验,此处仅演示骨架)。
-	if platformOrderID == "" || cpOrderID == "" || amount == "" {
+	//    还应做金额与本地订单一致、account+cpOrderId 归属交叉校验,此处仅演示骨架)。
+	if orderID == "" || cpOrderID == "" || amount == "" {
 		s.log.Warn("callback_missing_fields",
-			"platformOrderId", platformOrderID, "cpOrderId", cpOrderID, "amount", amount, "signOK", true)
+			"orderId", orderID, "cpOrderId", cpOrderID, "amount", amount, "signOK", true)
 		s.writeFail(w, http.StatusBadRequest, "missing_fields")
 		return
 	}
 
-	// 3) 幂等"发放":同一笔(以平台订单号为幂等键)只发放一次,重复回调只确认、不重复交付
-	//    (04 §4 / 05 §3.4)。平台重试/超时重投/巡检补偿都会重复发同字节回调。
+	// 3) 幂等"发放":只按 orderId 幂等去重(= orders 表 PK、全局唯一;cpOrderId 平台不保证唯一,
+	//    不能作去重键)。同一笔只发放一次,重复回调只确认、不重复交付(04 §4 / ADR-0016)。
+	//    平台重试/超时重投/巡检补偿都会重复发同字节回调;无时间戳/防重放窗口,orderId 幂等即唯一防线。
 	s.mu.Lock()
-	prev, repeated := s.delivered[platformOrderID]
+	prev, repeated := s.delivered[orderID]
 	if !repeated {
-		s.delivered[platformOrderID] = "granted@" + time.Now().Format(time.RFC3339)
+		s.delivered[orderID] = "granted@" + time.Now().Format(time.RFC3339)
 	}
 	s.mu.Unlock()
 
 	if repeated {
 		s.log.Info("callback_idempotent_repeat",
-			"platformOrderId", platformOrderID, "cpOrderId", cpOrderID,
+			"orderId", orderID, "cpOrderId", cpOrderID,
 			"account", maskAccount(account), "amount", amount, "signOK", true,
 			"action", "ack_only", "firstGrant", prev)
 	} else {
 		// 真实游戏服务端在此处发放物品;mock 仅记账。
 		s.log.Info("callback_granted",
-			"platformOrderId", platformOrderID, "cpOrderId", cpOrderID,
-			"account", maskAccount(account), "amount", amount, "money", payload["money"],
-			"payMoney", payload["pay_money"], "commodity", payload["commodity"],
-			"serverId", payload["serverId"], "signOK", true, "action", "grant")
+			"orderId", orderID, "cpOrderId", cpOrderID,
+			"account", maskAccount(account), "amount", amount, "payAmount", payload["payAmount"],
+			"commodity", payload["commodity"], "serverId", payload["serverId"],
+			"serverKeyId", serverKeyID, "signOK", true, "action", "grant")
 	}
 
 	// 4) 游戏侧确认体:平台 postCallback 仅当 HTTP 200 且 body {code:200,msg:"success"} 才判"已确认"
-	//    (domain_m3.go:291-300)。两者皆需,缺一即被平台判失败。
+	//    (domain_m3.go postCallback)。两者皆需,缺一即被平台判失败。
 	s.writeAck(w)
 }
 

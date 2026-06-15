@@ -24,7 +24,7 @@ type WechatNotifyEnvelope struct {
 
 // WechatTransaction 解密后的交易资源(只取反欺诈/对账必需字段)。
 type WechatTransaction struct {
-	OutTradeNo    string `json:"out_trade_no"` // = 平台 platformOrderId
+	OutTradeNo    string `json:"out_trade_no"` // = 平台 orderId
 	TransactionID string `json:"transaction_id"`
 	TradeState    string `json:"trade_state"` // SUCCESS / REFUND / NOTPAY / CLOSED / ...
 	Amount        struct {
@@ -85,7 +85,7 @@ func (s *WechatSigner) DecryptNotifyResource(env *WechatNotifyEnvelope) (*Wechat
 
 // WechatPrepayInput 预下单入参(方式无关订单 → 渠道侧字段映射)。
 type WechatPrepayInput struct {
-	OutTradeNo  string // = platformOrderId
+	OutTradeNo  string // = orderId
 	Description string // 商品描述
 	TotalFen    int    // 金额(分)
 	OpenID      string // JSAPI 必填(玩家在该 appid 下的 openid);H5 留空

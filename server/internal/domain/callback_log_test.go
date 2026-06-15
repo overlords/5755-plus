@@ -26,7 +26,7 @@ func TestDispatchCallbackLogsChainWithoutSecret(t *testing.T) {
 	svc := NewWith(nil, Options{CallbackSecret: secret, Logger: lg})
 
 	o := &store.Order{
-		PlatformOrderID: "P5755TEST1", CPOrderID: "cp-abc-123", Account: "ga_57550001_0025",
+		OrderID: "P5755TEST1", CPOrderID: "cp-abc-123", Account: "ga_57550001_0025",
 		Amount: "1.00", Commodity: "钻石", ServerID: "s1", ServerName: "一区",
 	}
 	if ok := svc.dispatchCallback(ts.URL, o); !ok {
@@ -35,7 +35,7 @@ func TestDispatchCallbackLogsChainWithoutSecret(t *testing.T) {
 
 	out := buf.String()
 	if !strings.Contains(out, "callback_attempt") || !strings.Contains(out, "P5755TEST1") {
-		t.Errorf("日志应可按 platformOrderId 检索 callback_attempt;实际:\n%s", out)
+		t.Errorf("日志应可按 orderId 检索 callback_attempt;实际:\n%s", out)
 	}
 	if !strings.Contains(out, "cp-abc-123") {
 		t.Errorf("日志应含 cpOrderId 以便对账;实际:\n%s", out)
