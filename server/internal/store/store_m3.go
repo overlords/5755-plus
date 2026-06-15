@@ -91,6 +91,24 @@ func (s *Store) GetOrderForGame(ctx context.Context, orderID, gameID string) (*O
 	return o, nil
 }
 
+// OrderByCPOrderID 按 (game_id, cp_order_id) 取订单,供创建侧幂等(ADR-0020 / 04 §2.9.1)。
+// (game_id, cp_order_id) UNIQUE(migration 0016),至多一行;无则 ErrNotFound。
+func (s *Store) OrderByCPOrderID(ctx context.Context, gameID, cpOrderID string) (*Order, error) {
+	var o Order
+	err := s.pool.QueryRow(ctx, `SELECT order_id, cp_order_id, account, game_id, platform_account_id,
+		amount::text, commodity, server_id, server_name, role_id, role_name, role_level, payment_status, callback_status
+		FROM orders WHERE game_id=$1 AND cp_order_id=$2`, gameID, cpOrderID).Scan(
+		&o.OrderID, &o.CPOrderID, &o.Account, &o.GameID, &o.PlatformAccountID, &o.Amount,
+		&o.Commodity, &o.ServerID, &o.ServerName, &o.RoleID, &o.RoleName, &o.RoleLevel, &o.PaymentStatus, &o.CallbackStatus)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, ErrNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &o, nil
+}
+
 func (s *Store) UpdateOrderStatus(ctx context.Context, orderID, paymentStatus, callbackStatus string) error {
 	_, err := s.pool.Exec(ctx, `UPDATE orders SET payment_status=$2, callback_status=$3 WHERE order_id=$1`,
 		orderID, paymentStatus, callbackStatus)

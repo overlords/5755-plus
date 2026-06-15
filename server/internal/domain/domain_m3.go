@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -103,6 +104,39 @@ func (svc *Service) CreateOrder(ctx context.Context, in OrderInput, baseURL stri
 	}
 	if in.Commodity == "" || in.ServerID == "" || in.ServerName == "" || in.RoleID == "" || in.RoleName == "" {
 		return nil, fault(400, result.ReasonOrderInvalid, "订单归属字段缺失")
+	}
+	// 创建侧幂等(ADR-0020 / 04 §2.9.1):同 (gameId, cpOrderId) 不重复建单。
+	// (game_id, cp_order_id) UNIQUE(migration 0016)为 DB 兜底;此处先查,命中按归属→已支付→字段一致三分支处置。
+	if existing, lerr := svc.store.OrderByCPOrderID(ctx, in.GameID, in.CPOrderID); lerr == nil {
+		// 归属校验在前:cpOrderId 按游戏唯一,若撞他人订单不回显其 orderId(反探测,对齐 04 §2.9.2)。
+		if existing.Account != account {
+			svc.log().Info("order_create_idempotent_reject_conflict", "cpOrderId", in.CPOrderID,
+				"account", maskAccount(account), "gameId", in.GameID)
+			return nil, fault(400, result.ReasonOrderInvalid, "CP 订单号冲突")
+		}
+		if existing.PaymentStatus != "待支付" {
+			svc.log().Info("order_create_idempotent_reject_paid", "orderId", existing.OrderID,
+				"cpOrderId", in.CPOrderID, "account", maskAccount(account), "gameId", in.GameID, "status", existing.PaymentStatus)
+			return nil, fault(400, result.ReasonOrderInvalid, "订单已存在且非待支付,不可重复创建")
+		}
+		if existing.Amount != in.Amount || existing.Commodity != in.Commodity ||
+			existing.ServerID != in.ServerID || existing.ServerName != in.ServerName ||
+			existing.RoleID != in.RoleID || existing.RoleName != in.RoleName || existing.RoleLevel != in.RoleLevel {
+			svc.log().Info("order_create_idempotent_reject_mismatch", "orderId", existing.OrderID,
+				"cpOrderId", in.CPOrderID, "account", maskAccount(account), "gameId", in.GameID)
+			return nil, fault(400, result.ReasonOrderInvalid, "同 CP 订单号字段不一致,拒绝重复创建")
+		}
+		// 待支付 + 归属一致 + 字段一致 → 幂等返回已存在订单(同 orderId/paymentUrl,不新建)
+		svc.log().Info("order_create_idempotent_return", "orderId", existing.OrderID,
+			"cpOrderId", in.CPOrderID, "account", maskAccount(account), "gameId", in.GameID)
+		return &OrderCreateData{
+			OrderID:    existing.OrderID,
+			PaymentURL: baseURL + "/pay/" + existing.OrderID,
+			Account:    existing.Account, CPOrderID: existing.CPOrderID, Amount: existing.Amount,
+			Commodity: existing.Commodity, ServerID: existing.ServerID, ServerName: existing.ServerName,
+		}, nil
+	} else if !errors.Is(lerr, store.ErrNotFound) {
+		return nil, fault(503, result.ReasonPlatformUnavailable, "订单查重失败")
 	}
 	// 服务端复核合规门禁(D3)
 	rn, err := svc.store.GetRealName(ctx, platformAccountID)
