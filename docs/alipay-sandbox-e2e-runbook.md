@@ -2,6 +2,8 @@
 
 > 派生文档(随 `04`/`05`/ADR-0013 对齐,非权威 spec)。把支付宝**沙箱**整条支付链一次跑通:`下单 → 收银台 → wap → 沙箱付款 → 异步通知 → 平台验签反欺诈 → 充值回调送达游戏服务端 → 游戏侧验签通过`。依据 ADR-0013(dev 走沙箱、prod 走小额真单)。微信无沙箱,只能等真资质真单——支付宝这条链可在生产资质前先验。
 
+> **✅ 端到端实战已通过(2026-06-15,sdk-dev)**:整条链全绿——下单 → 服务端预下单签名 → **支付宝沙箱接受签名进收银台** → 沙箱钱包付款 → 异步通知 `POST /pay/alinotify`(支付宝公网 IP)→ RSA2 验签 + 反欺诈 + 入账(`notify_settled`,真交易号 `2026061522001415630508903454`)→ 充值回调投递 mock-gameserver → **mock MD5 验签通过、回 `{code:200,msg:success}`**(`callback_attempt ok=true`、`callback_redeliver_sweep confirmed=1`)。**漏发自愈实战验证**:回调先因 `callback_url` 死值失败重投十余轮,mock 一就绪,下次巡检 sweep 自动投递确认(#60 自愈不依赖渠道重推)。生产仅余:真实商户密钥 + 生产网关 + 小额真单对账(GA 第 2/3 项)。
+
 ## 充值回调签名口径(联调成败的关键)
 
 **出站充值回调(平台→游戏服务端)签名 = MD5,不是 HMAC**,且**不复用** `internal/signature`(那是入站 SDK→平台的 HMAC-SHA256 + `X-M5755-Signature` 头)。真相源:`server/internal/domain/domain_m3.go:304-323 callbackSign`。
