@@ -106,6 +106,52 @@ func TestOrderCreateOK(t *testing.T) {
 	}
 }
 
+// 创建侧 (gameId, cpOrderId) 幂等(ADR-0020 / 04 §2.9.1):待支付且字段一致 → 返回同单。
+func TestOrderCreateIdempotentReturnsSameOrder(t *testing.T) {
+	srv, _ := setup(t)
+	account, token, _ := loginToSubaccount(t, srv)
+	ar1 := doSignedH(t, srv.URL, "POST", "/api/sdk/v2/orders", "", orderBody(account, token, nil), nil)
+	if !ar1.Success {
+		t.Fatalf("首次创建应成功: %+v", ar1)
+	}
+	ar2 := doSignedH(t, srv.URL, "POST", "/api/sdk/v2/orders", "", orderBody(account, token, nil), nil)
+	if !ar2.Success {
+		t.Fatalf("同 cpOrderId 重复创建应幂等成功: %+v", ar2)
+	}
+	if ar1.Data["orderId"] != ar2.Data["orderId"] || ar1.Data["paymentUrl"] != ar2.Data["paymentUrl"] {
+		t.Fatalf("幂等应返回同一订单: %v vs %v", ar1.Data, ar2.Data)
+	}
+}
+
+// 同 cpOrderId 改归属字段(金额) → 拒,防篡改。
+func TestOrderCreateIdempotentMismatchRejected(t *testing.T) {
+	srv, _ := setup(t)
+	account, token, _ := loginToSubaccount(t, srv)
+	if ar := doSignedH(t, srv.URL, "POST", "/api/sdk/v2/orders", "", orderBody(account, token, nil), nil); !ar.Success {
+		t.Fatalf("首次创建应成功: %+v", ar)
+	}
+	ar := doSignedH(t, srv.URL, "POST", "/api/sdk/v2/orders", "", orderBody(account, token, map[string]interface{}{"amount": "999.00"}), nil)
+	if ar.Success || ar.Reason != "order_invalid" {
+		t.Fatalf("同 cpOrderId 改金额应 order_invalid: %+v", ar)
+	}
+}
+
+// 已支付订单同 cpOrderId 再创建 → 拒,不可重复创建。
+func TestOrderCreatePaidRejected(t *testing.T) {
+	srv, st := setup(t)
+	account, token, _ := loginToSubaccount(t, srv)
+	ar := doSignedH(t, srv.URL, "POST", "/api/sdk/v2/orders", "", orderBody(account, token, nil), nil)
+	orderID := ar.Data["orderId"].(string)
+	// 直接置已支付(经 store,不依赖 dev 控制面 /internal/* —— 生产构建子集不注册该路由)
+	if err := st.UpdateOrderStatus(t.Context(), orderID, "已支付", "已确认"); err != nil {
+		t.Fatalf("置已支付失败: %v", err)
+	}
+	ar2 := doSignedH(t, srv.URL, "POST", "/api/sdk/v2/orders", "", orderBody(account, token, nil), nil)
+	if ar2.Success || ar2.Reason != "order_invalid" {
+		t.Fatalf("已支付订单同 cpOrderId 应 order_invalid: %+v", ar2)
+	}
+}
+
 func TestOrderValidation(t *testing.T) {
 	srv, _ := setup(t)
 	account, token, _ := loginToSubaccount(t, srv)
