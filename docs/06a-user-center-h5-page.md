@@ -44,6 +44,7 @@
 | `/api/uc/v2/password/sms-codes` | POST | 改密:向**已绑手机**发验证码(短信验证身份) | 无 body(取会话绑定手机) |
 | `/api/uc/v2/password` | PUT | 提交改密 | body `smsCode`、`newPassword` |
 
+- **归属强校验(防横向越权/IDOR)**:所有 `/api/uc/v2/*` 端点的数据主体一律由 `platformToken` 解析出的 `platformAccountId`(绑 `gameId` 三元组)决定,**服务端不接受请求体/query 中的任何账户标识作为查询主体**;`orders` 的 `cursor` 仅作该账户订单集内的分页游标,不得跨账户寻址。越权/失效一律按 `platform_account_invalid` 或 401 收口,不回显他人数据,与网关面 04 §2.9.2 反探测口径对齐。
 - **失效收口**:任一端点返回 `reason=platform_account_invalid` 或 401 → SPA 调 `postAccountAction("session_invalid")`,SDK 清理登录态回 5755 登录窗(06 §4),不在页内提示重试。
 - **改密成功 → 强制重登**:改密使当前 `platformToken` 作废,SPA 提交成功后即调 `postAccountAction("session_invalid")`。
 - **换绑手机成功不登出**:回主页刷新脱敏手机 + 成功 toast。新手机号已被占用 → `409` + `reason=param_invalid`(SPA 内联提示「该手机号已被占用」,不触发失效收口)。
@@ -78,7 +79,7 @@
 
 ## 7. 安全
 
-- 仅 https 加载;`platformToken` 经 query `?token=` 传入,SPA **加载即读入内存并 `history.replaceState` 抹除可见 URL**,避免泄漏进历史/截图/日志。
+- 仅 https 加载;`platformToken` 经 **URL fragment**(`#token=`)传入(**不用 query**:`#` 段不发往服务器,不进平台侧访问日志/代理缓存/Referer,对齐 04 §1.4 凭据禁入 query),SPA **加载即用 `location.hash` 读入内存、`history.replaceState` 抹除可见 URL**,避免泄漏进历史/截图/日志。token 捕获在 hash 路由 `route()` 之前执行并抹掉 token 段,故不与 `#/phone`、`#/orders` 等路由 fragment 冲突。
 - 所有 `/api/uc/v2/*` 调用带 `X-M5755-Platform-Token`;`origin`/CORS 受控(ADR-0010)。
 - 容器禁用项(文件/媒体/APK/外跳/通用 H5)由 SDK 侧保持关闭(06 §2);uc SPA **不依赖**任何被禁能力。
 

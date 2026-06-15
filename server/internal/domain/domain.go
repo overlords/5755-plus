@@ -342,29 +342,42 @@ func (svc *Service) authenticatePassword(ctx context.Context, in LoginInput) (st
 	if !ok || hash == "" || !checkPassword(hash, in.Credential) {
 		return "", fault(401, result.ReasonCredentialInvalid, "账号或密码错误")
 	}
-	// 设备信任:未提供 deviceId 时视为已信任(兼容无设备 ID 的调用);提供则按设备判定。
-	if in.DeviceID != "" {
-		trusted, err := svc.store.IsDeviceTrusted(ctx, paID, in.DeviceID)
-		if err != nil {
-			return "", fault(503, result.ReasonPlatformUnavailable, "设备校验失败")
+	// 设备验证每游戏开关(#25,migration 0015):v2 版本默认关。
+	// 关(默认)→ 密码登录只验密码,跳过整个设备信任块直接返回 paID(deviceId 可带可不带、不强制)。
+	// 开 → 走下方 fail-closed 设备块(缺 deviceId→400、未信任→deviceVerifyCode→TrustDevice)。
+	// DB 读开关失败→fault(503),不静默放行(避免 DB 抖动时整批游戏退化为纯密码)。
+	deviceVerify, err := svc.store.DeviceVerificationEnabled(ctx, in.GameID)
+	if err != nil {
+		return "", fault(503, result.ReasonPlatformUnavailable, "设备验证开关读取失败")
+	}
+	if !deviceVerify {
+		return paID, nil
+	}
+	// 设备信任(#25):deviceId 必填(SDK 每次必传 getOrCreateDeviceId);**fail-closed**——
+	// 缺失即拒,杜绝攻击者"省略 deviceId 绕过设备校验"。原"缺则视为已信任"是 fail-open 弱点。
+	if in.DeviceID == "" {
+		return "", fault(400, result.ReasonParamInvalid, "缺少 deviceId")
+	}
+	trusted, err := svc.store.IsDeviceTrusted(ctx, paID, in.DeviceID)
+	if err != nil {
+		return "", fault(503, result.ReasonPlatformUnavailable, "设备校验失败")
+	}
+	if !trusted {
+		if in.DeviceVerifyCode == "" {
+			return "", fault(401, result.ReasonDeviceVerificationRequired, "设备需短信验证")
 		}
-		if !trusted {
-			if in.DeviceVerifyCode == "" {
-				return "", fault(401, result.ReasonDeviceVerificationRequired, "设备需短信验证")
-			}
-			res, err := svc.store.ConsumeDeviceCode(ctx, in.GameID, in.LoginAccount, in.DeviceVerifyCode)
-			if err != nil {
-				return "", fault(503, result.ReasonPlatformUnavailable, "设备验证码校验失败")
-			}
-			if res == store.SmsConsumeExpired {
-				return "", fault(401, result.ReasonSmsCodeExpired, "验证码已过期")
-			}
-			if res == store.SmsConsumeInvalid {
-				return "", fault(401, result.ReasonSmsCodeInvalid, "验证码错误")
-			}
-			if err := svc.store.TrustDevice(ctx, paID, in.DeviceID); err != nil {
-				return "", fault(503, result.ReasonPlatformUnavailable, "设备信任写入失败")
-			}
+		res, err := svc.store.ConsumeDeviceCode(ctx, in.GameID, in.LoginAccount, in.DeviceVerifyCode)
+		if err != nil {
+			return "", fault(503, result.ReasonPlatformUnavailable, "设备验证码校验失败")
+		}
+		if res == store.SmsConsumeExpired {
+			return "", fault(401, result.ReasonSmsCodeExpired, "验证码已过期")
+		}
+		if res == store.SmsConsumeInvalid {
+			return "", fault(401, result.ReasonSmsCodeInvalid, "验证码错误")
+		}
+		if err := svc.store.TrustDevice(ctx, paID, in.DeviceID); err != nil {
+			return "", fault(503, result.ReasonPlatformUnavailable, "设备信任写入失败")
 		}
 	}
 	return paID, nil

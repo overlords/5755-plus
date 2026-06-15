@@ -161,6 +161,26 @@ func (s *Store) FindAccountByLogin(ctx context.Context, loginAccount string) (pl
 	return platformAccountID, passwordHash, displayName, true, nil
 }
 
+// DeviceVerificationEnabled 读某游戏的设备验证开关(#25,migration 0015,default false)。
+// DB 错→error(调用方据此 fail-closed 到 503);无行(游戏不存在)→false=关。
+func (s *Store) DeviceVerificationEnabled(ctx context.Context, gameID string) (bool, error) {
+	var enabled bool
+	err := s.pool.QueryRow(ctx, `SELECT device_verification_enabled FROM games WHERE game_id=$1`, gameID).Scan(&enabled)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return enabled, nil
+}
+
+// SetDeviceVerificationEnabled 翻该游戏的设备验证开关(运维/测试夹具用;生产由配置面管理)。
+func (s *Store) SetDeviceVerificationEnabled(ctx context.Context, gameID string, enabled bool) error {
+	_, err := s.pool.Exec(ctx, `UPDATE games SET device_verification_enabled=$2 WHERE game_id=$1`, gameID, enabled)
+	return err
+}
+
 func (s *Store) IsDeviceTrusted(ctx context.Context, platformAccountID, deviceID string) (bool, error) {
 	var exists bool
 	err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM device_trust WHERE platform_account_id=$1 AND device_id=$2)`,
