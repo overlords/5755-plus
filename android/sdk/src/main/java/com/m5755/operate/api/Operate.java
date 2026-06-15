@@ -71,6 +71,7 @@ public final class Operate {
                 com.m5755.operate.core.channel.ChannelResolver.resolve(activity);
         controller.setChannel(ch.resolved, ch.source);
         ui.setController(controller);
+        warnIfNoConfigChanges(activity); // #44 接入自检(诊断型):未声明 configChanges 旋转会重建丢浮层
         background.execute(new Runnable() {
             public void run() {
                 com.m5755.operate.core.gateway.Results.Config r =
@@ -82,6 +83,27 @@ public final class Operate {
                 }
             }
         });
+    }
+
+    /**
+     * #44 接入自检(诊断型,不阻断):游戏 Activity 未声明 android:configChanges="orientation|screenSize" 时,
+     * 旋转会重建 Activity、SDK 浮层与输入/勾选/倒计时态会丢失。锁定方向的游戏可忽略(ADR-0009:开屏即定、
+     * 不实现旋转实时切换);允许旋转的游戏应声明该属性。
+     */
+    private static void warnIfNoConfigChanges(Activity activity) {
+        try {
+            android.content.pm.ActivityInfo ai = activity.getPackageManager()
+                    .getActivityInfo(activity.getComponentName(), 0);
+            int cc = ai.configChanges;
+            boolean orient = (cc & android.content.pm.ActivityInfo.CONFIG_ORIENTATION) != 0;
+            boolean size = (cc & android.content.pm.ActivityInfo.CONFIG_SCREEN_SIZE) != 0;
+            if (!orient || !size) {
+                android.util.Log.w("M5755Sdk", "接入自检:游戏 Activity 未声明 android:configChanges=\"orientation|screenSize\""
+                        + ";旋转会重建 Activity、SDK 浮层与表单态可能丢失。若游戏允许旋转请声明该属性(ADR-0009;锁定方向的游戏可忽略)。");
+            }
+        } catch (Exception e) {
+            // 诊断型:取不到 ActivityInfo 忽略,不阻断 init
+        }
     }
 
     /** 登录:SDK 内部处理协议/账户登录/实名/门禁/小号,最终回调 User(account+token)。 */

@@ -62,4 +62,14 @@ public class OrientationTest {
                 h.hasText("账号安全", TestHarness.WAIT) || h.hasText("当前小号", TestHarness.WAIT));
         h.screencap("orient_uc_land"); // uc SPA 渲染后截,看横屏左侧全高抽屉
     }
+
+    /** 弹性弹窗(登录窗):横屏靠 Android 自动重排,不溢出(回归基线;弹性面不退化为固定 dp)。 */
+    @Test
+    public void loginWindowLandscape() throws Exception {
+        h.setLandscape();
+        h.freshLaunch();
+        h.toLoginWindow();
+        assertTrue("横屏登录窗(弹性弹窗自动重排)应完整可见", h.hasText("验证码登录", TestHarness.WAIT));
+        h.screencap("orient_login_land");
+    }
 }
