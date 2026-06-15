@@ -109,6 +109,55 @@ final class TestHarness {
         return phone;
     }
 
+    // ===== #44 横屏方向适配 helper(ADR-0009 开屏即定) =====
+
+    /** 锁横屏(模拟锁方向横屏游戏);开屏即定下,后续挂载的面即横屏形态。 */
+    void setLandscape() throws Exception {
+        device.setOrientationLeft();
+        device.waitForIdle();
+        Thread.sleep(700);
+    }
+
+    /** 复位自然(竖屏)方向。 */
+    void setPortrait() throws Exception {
+        device.setOrientationNatural();
+        device.waitForIdle();
+        Thread.sleep(700);
+    }
+
+    /** 登录 + 实名提交,停在小号选择页(不点进)。中文用 setText 注入,绕开 adb 输入限制。 */
+    void toSubaccountPicker() throws Exception {
+        freshLaunch();
+        toLoginWindow();
+        doSmsLogin(uniquePhone());
+        waitText("请输入真实姓名").setText("测试玩家");
+        waitText("请输入身份证号").setText("11010119900101001X");
+        tapExact("提交");
+        assertTrue("应到小号选择页", hasText("选择小号进入游戏", WAIT));
+    }
+
+    /** 选小号1进入游戏(到游戏内,可调支付/悬浮球)。 */
+    void loginToGame() throws Exception {
+        toSubaccountPicker();
+        tapExact("小号1");
+        assertTrue("登录态校验通过", hasText("登录态校验通过", WAIT));
+        tapExact("进入游戏");
+    }
+
+    /** screencap 到设备 /sdcard(host 侧 adb pull 取);样例 getExternalFilesDir 为 null,故不用 takeScreenshot。 */
+    void screencap(String name) throws Exception {
+        shell("screencap -p /sdcard/" + name + ".png");
+        Thread.sleep(300);
+    }
+
+    /** 样例主屏 ScrollView 横屏下按钮可能在屏外:滚动到含 text 的控件再点。 */
+    void scrollToTap(String text) throws Exception {
+        new androidx.test.uiautomator.UiScrollable(
+                new androidx.test.uiautomator.UiSelector().scrollable(true))
+                .scrollIntoView(new androidx.test.uiautomator.UiSelector().textContains(text));
+        tapText(text);
+    }
+
     // ===== dev 控制面(签名直调) =====
 
     void devControl(String path, JSONObject body) throws Exception {
