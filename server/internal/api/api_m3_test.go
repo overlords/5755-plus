@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -347,6 +348,11 @@ func passwordLogin(t *testing.T, srv *httptest.Server, password, deviceID, verif
 
 func TestPasswordLoginAndDeviceVerification(t *testing.T) {
 	srv, st := setup(t)
+	// 设备验证默认关:本用例锁定「开启」路径,故先把该游戏开关置 true。
+	if err := st.SetDeviceVerificationEnabled(t.Context(), seedGame, true); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.SetDeviceVerificationEnabled(context.Background(), seedGame, false) })
 	// 测试不经 main,需手动种密码账户(同 dev 启动种子)
 	hash, _ := domain.HashPassword("Test1234")
 	if err := st.EnsureDevPasswordAccount(t.Context(), "13900000000", "密码测试账户", hash); err != nil {
@@ -377,5 +383,59 @@ func TestPasswordLoginAndDeviceVerification(t *testing.T) {
 	// 新设备:仍需验证(逐设备)
 	if ar := passwordLogin(t, srv, "Test1234", "dev2-"+randomPhone(), ""); ar.Reason != "device_verification_required" {
 		t.Fatalf("另一新设备应再次需验证: %+v", ar)
+	}
+}
+
+// TestPasswordLoginMissingDeviceIDFailsClosed 锁定 #25 fail-closed:密码正确但 deviceId 为空时
+// 必须 400 + reason=param_invalid(缺 deviceId),不得回退到 fail-open「缺则视为已信任」直接放行。
+// 防御:攻击者省略 deviceId 绕过设备校验。用 doSigned(返回 *http.Response)以校验 HTTP 状态码。
+func TestPasswordLoginMissingDeviceIDFailsClosed(t *testing.T) {
+	srv, st := setup(t)
+	// fail-closed 仅在设备验证开启时生效;默认关下缺 deviceId 是纯密码登录成功(见
+	// TestPasswordLoginDefaultOffNoDeviceIDSucceeds),故本用例先开启开关。
+	if err := st.SetDeviceVerificationEnabled(t.Context(), seedGame, true); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.SetDeviceVerificationEnabled(context.Background(), seedGame, false) })
+	hash, _ := domain.HashPassword("Test1234")
+	if err := st.EnsureDevPasswordAccount(t.Context(), "13900000000", "密码测试账户", hash); err != nil {
+		t.Fatal(err)
+	}
+	// 正确密码 + 空 deviceId:密码校验通过后撞 deviceId 必填检查 → 400 param_invalid。
+	b, _ := json.Marshal(map[string]string{
+		"gameId": seedGame, "loginMethod": "password", "loginAccount": "13900000000",
+		"credential": "Test1234", "channelId": "default", "channelSource": "manifest",
+		// 故意不带 deviceId
+	})
+	res, ar := doSigned(t, srv.URL, "POST", "/api/sdk/v2/account-sessions", "", b, 0, false, false)
+	if ar.Success {
+		t.Fatalf("缺 deviceId 不应登录成功: %+v", ar)
+	}
+	if res.StatusCode != 400 || ar.Reason != "param_invalid" {
+		t.Fatalf("缺 deviceId 应 400/param_invalid,得到 %d / %+v", res.StatusCode, ar)
+	}
+}
+
+// TestPasswordLoginDefaultOffNoDeviceIDSucceeds 锁定 #25 默认关语义:demo 游戏
+// device_verification_enabled 默认 false → 正确密码 + 不带 deviceId → 密码登录成功
+// (200 + 签发 platformToken),整个设备信任块被跳过。这是 v2 版本默认行为的护栏。
+func TestPasswordLoginDefaultOffNoDeviceIDSucceeds(t *testing.T) {
+	srv, st := setup(t)
+	// 不调 SetDeviceVerificationEnabled:依赖 migration 0015 的 default false。
+	hash, _ := domain.HashPassword("Test1234")
+	if err := st.EnsureDevPasswordAccount(t.Context(), "13900000000", "密码测试账户", hash); err != nil {
+		t.Fatal(err)
+	}
+	// 正确密码 + 故意不带 deviceId:默认关 → 纯密码登录成功。
+	b, _ := json.Marshal(map[string]string{
+		"gameId": seedGame, "loginMethod": "password", "loginAccount": "13900000000",
+		"credential": "Test1234", "channelId": "default", "channelSource": "manifest",
+	})
+	res, ar := doSigned(t, srv.URL, "POST", "/api/sdk/v2/account-sessions", "", b, 0, false, false)
+	if res.StatusCode != 200 || !ar.Success {
+		t.Fatalf("默认关 + 无 deviceId 应密码登录成功,得到 %d / %+v", res.StatusCode, ar)
+	}
+	if tok, _ := ar.Data["platformToken"].(string); tok == "" {
+		t.Fatalf("默认关密码登录应签发 platformToken: %+v", ar.Data)
 	}
 }

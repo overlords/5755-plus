@@ -272,6 +272,8 @@ func TestUserCenterChangePassword_NewPasswordLogsIn(t *testing.T) {
 	}
 
 	// 关键断言:新密码能在网关面密码登录(证明改密真写入、且登录读取的是同一行)。
+	// demo 游戏设备验证默认关(#25,migration 0015 default false)→ 纯密码登录即成功,
+	// 无需 deviceId / 设备信任(贴默认行为;设备开启路径见 TestPasswordLoginAndDeviceVerification)。
 	lb, _ := json.Marshal(map[string]string{
 		"gameId": seedGame, "loginMethod": "password", "loginAccount": phone, "credential": newPassword,
 	})
