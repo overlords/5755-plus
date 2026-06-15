@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# 同一分支新 push 取消旧运行(省 CI 资源)
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  server:
+    name: server — go test (dev + prod 排除)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: m5755test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # 设 DATABASE_URL 才能跑 HTTP-seam 测试(否则 setup() t.Skip → 裸 go test 空过假绿,#55 第1项)
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/m5755test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache-dependency-path: server/go.sum
+      - name: go vet
+        working-directory: server
+        run: go vet ./...
+      - name: go test (dev 构建,含 DB seam 全套)
+        working-directory: server
+        run: go test ./... -count=1
+      - name: go test (-tags production,生产排除子集)
+        working-directory: server
+        run: go test -tags production ./internal/api/ -count=1
+
+  android-sdk:
+    name: android :sdk — 纯净门禁 + 单测 (JDK 21)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: verifyPurityGateMetaTest + verifyPublicAarPurity + :sdk:test
+        working-directory: android
+        run: ./gradlew --no-daemon --console=plain :sdk:verifyPurityGateMetaTest :sdk:verifyPublicAarPurity :sdk:test
