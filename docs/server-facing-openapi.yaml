@@ -83,7 +83,7 @@ webhooks:
         (orderId 是平台订单号、全局唯一)。本回调**无时间戳/防重放窗口**——漏发自愈巡检会重投与首发
         逐字节相同的陈旧但有效回调,加窗口会与自愈互斥,故 orderId 幂等去重即重复投递与重放的唯一防线
         (ADR-0016)。cpOrderId/amount/account 仅作一致性交叉校验(不符则拒发),**不可**作去重键
-        (cpOrderId 平台不保证唯一)。
+        (cpOrderId 跨游戏不保证唯一)。
         客户端支付回调(SDK onResult)与本回调是两条独立链路,**不得混用**;发货只认本回调。
       requestBody:
         required: true
@@ -95,7 +95,7 @@ webhooks:
               properties:
                 account: { type: string, description: 当前游戏小号 ID(发货归属) }
                 orderId: { type: string, description: "平台订单号(全局唯一,唯一幂等去重键)" }
-                cpOrderId: { type: string, description: 游戏订单号(下单时 CP 订单号原样返回;平台不保证唯一,仅交叉校验、不可作去重键) }
+                cpOrderId: { type: string, description: 游戏订单号(下单时 CP 订单号原样返回;跨游戏不保证唯一,仅交叉校验、回调不可作去重键;平台对单游戏创建侧幂等) }
                 amount: { type: string, description: 订单金额(元;仅一致性交叉校验、非去重键) }
                 payAmount: { type: string, description: 实付金额(元;前向兼容缝,v2 无折扣/券/余额,恒等于 amount——ADR-0012) }
                 commodity: { type: string }

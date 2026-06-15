@@ -1,4 +1,5 @@
-// Package signature 实现 04 §1.3 入站验签:HMAC-SHA256 + 时间戳防重放窗口。
+// Package signature 实现 04 §1.3 入站验签:HMAC-SHA256 + 时间戳时效窗口
+// (防过期,±300s;窗口内逐字节重放不拦——无 nonce/seen-cache,真·防重放为 C 档后续,见 04 §1.3)。
 package signature
 
 import (
