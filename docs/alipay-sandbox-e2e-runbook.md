@@ -53,7 +53,7 @@ DATABASE_URL=<平台 dev Postgres DSN>
    - base64 每 64 列换行(`fold -w64`)。
    不包 PEM 会 `NewAlipaySigner` 报「PEM 解码失败」→ 渠道 fail-closed、`pay_channels_assembled alipay=false`。
 2. **沙箱网关地址务必核实可达**:`openapi.alipaydev.com`(ADR-0013 / 上文 env 模板写的老沙箱网关)在本地验证环境 **TLS 不可达**(`curl` exit 60 证书层失败,未到签名层)。注入前从支付宝开放平台沙箱控制台**核实当前沙箱网关域名**,并 `curl -sS <gateway> -o /dev/null -w '%{http_code}'` 确认 TLS 可达——老沙箱域名可能已变更 / 证书失效。
-3. **`sign_type` 参与签名待真沙箱终验**:出站签名 canonical **含** `sign_type=RSA2`(支付宝请求签名口径),回调验签 `VerifyNotifySign` **剔除** `sign`+`sign_type`(V1 口径)。这两处只有真沙箱出网(下单)/ 真异步通知能终验;若沙箱回 `isv.invalid-signature`,优先排查 `sign_type` 规则。
+3. **`sign_type` 出站签名已沙箱终验通过 ✅**(2026-06-15):出站签名 canonical **含** `sign_type=RSA2`(支付宝请求签名口径)——`curl` 一个真实 wap URL → 沙箱网关 `openapi-sandbox.dl.alipaydev.com` 返回**支付宝收银台 H5**(http 200,重定向 `mobileclientgw-sandbox.dl.alipaydev.com/cashier/mobilepay.htm`),即**签名被接受**(签名错会回 `isv.invalid-signature`)。回调验签 `VerifyNotifySign` **剔除** `sign`+`sign_type`(V1 口径)仍待真异步通知终验。
 
 ## callback_url 配置(只能直连 DB)
 
