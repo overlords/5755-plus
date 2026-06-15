@@ -54,3 +54,4 @@ channelId 写在 APK Signing Block 自定义块(`0x71777777`),`channel-pack` 免
 - **channelId 字段语义冻结**:任何未来防篡改 / 归因增强不得挤占 channelId 字段或扩大其格式。
 - **双源分工明确**:`manifest` 源 = 接入方构建期写死的静态渠道(自有签名、重签无所谓);`signing_block` 源 = 平台落地页**动态免重签**盖的渠道(#32 推广链接)。两源非冗余,是静态 vs 动态两类来源。
 - **#32 立项时**:实现 `operations_mismatch`(服务端注册表)+ 决定是否上 HMAC(绑包名防跨游戏搬运)/ clickid(二期防 W1');所有扩展走独立 signing block 块 + 独立上报字段 + 服务端验签,遵免重签 + v1/v2/v3 混合签名约束;方案最终选型(签名 vs 注册表 vs clickid 叠加)在 #32 立项时另落 ADR。
+- **SDK 读取端不先于生成端写入动工**(先动工边界):`ApkSigningBlock` 对 v1/v2/v3 已正确兼容——定位 signing block 容器后**通用遍历 ID-value 对、不碰签名条目**(v2 `0x7109871a` / v3 `0xf05368c0`),故 v2 / v3 / v1+v2/v3 混合都读得到、v1-only(无 block)降级为缺失(→ `default`);这部分 M4 已交付、不欠账。但 HMAC / clickid 块的 **SDK 读取不具备「先动工」条件**:跨端格式契约的**读取端不能先于写入端落地**——生成端(#32 落地页)的签发格式(HMAC 算法 / 块 ID / 字节布局)未定前,SDK 先写死读取必返工。渠道块当年能随 M4 先动工,正因 `channel-pack`(写入端)**同期交付** + 跨端黄金向量(`ChannelRulesTest` fixture)钉死读写一致;故 HMAC / clickid 读取端须与 #32 生成端写入格式**同期定、黄金向量钉死**,不得单独提前。
