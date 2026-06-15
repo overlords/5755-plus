@@ -180,17 +180,17 @@ func (svc *Service) CompletePayment(ctx context.Context, gameID, orderID, mode s
 		return fault(503, result.ReasonPlatformUnavailable, "订单读取失败")
 	}
 	if mode == "失败" {
-		_ = svc.store.UpdateOrderStatus(ctx, orderID, "支付失败", "未投递")
+		_ = svc.store.UpdateOrderStatus(ctx, orderID, store.PaymentFailed, store.CallbackPending)
 		svc.log().Info("payment_completed", "orderId", orderID,
-			"gameId", gameID, "account", maskAccount(o.Account), "result", "支付失败")
+			"gameId", gameID, "account", maskAccount(o.Account), "result", store.PaymentFailed)
 		return nil
 	}
-	_ = svc.store.UpdateOrderStatus(ctx, orderID, "已支付", "投递中")
+	_ = svc.store.UpdateOrderStatus(ctx, orderID, store.PaymentPaid, store.CallbackDelivering)
 	callbackURL, err := svc.store.GetCallbackURL(ctx, gameID)
 	if err != nil || callbackURL == "" {
-		_ = svc.store.UpdateOrderStatus(ctx, orderID, "已支付", "无回调地址")
+		_ = svc.store.UpdateOrderStatus(ctx, orderID, store.PaymentPaid, store.CallbackNoURL)
 		svc.log().Warn("callback_skipped", "orderId", orderID,
-			"gameId", gameID, "reason", "无回调地址")
+			"gameId", gameID, "reason", store.CallbackNoURL)
 		return nil
 	}
 	confirmed := svc.dispatchCallback(ctx, callbackURL, o)
@@ -198,11 +198,11 @@ func (svc *Service) CompletePayment(ctx context.Context, gameID, orderID, mode s
 		// 重复推送语义:再投一次(同笔字段一致)
 		confirmed = svc.dispatchCallback(ctx, callbackURL, o) || confirmed
 	}
-	status := "已确认"
+	status := store.CallbackConfirmed
 	if !confirmed {
-		status = "投递失败"
+		status = store.CallbackFailed
 	}
-	_ = svc.store.UpdateOrderStatus(ctx, orderID, "已支付", status)
+	_ = svc.store.UpdateOrderStatus(ctx, orderID, store.PaymentPaid, status)
 	svc.log().Info("callback_settled", "orderId", orderID, "gameId", gameID,
 		"account", maskAccount(o.Account), "cpOrderId", o.CPOrderID, "callbackStatus", status, "mode", mode)
 	return nil
@@ -225,7 +225,7 @@ func (svc *Service) RedeliverPendingCallbacks(ctx context.Context) (attempted, c
 		}
 		attempted++
 		if svc.dispatchCallback(ctx, callbackURL, &o) {
-			_ = svc.store.UpdateOrderStatus(ctx, o.OrderID, "已支付", "已确认")
+			_ = svc.store.UpdateOrderStatus(ctx, o.OrderID, store.PaymentPaid, store.CallbackConfirmed)
 			confirmed++
 			svc.log().Info("callback_redelivered", "orderId", o.OrderID, "gameId", o.GameID)
 		}

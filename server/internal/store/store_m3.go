@@ -102,8 +102,8 @@ func (s *Store) UpdateOrderStatus(ctx context.Context, orderID, paymentStatus, c
 func (s *Store) ListUndeliveredPaidOrders(ctx context.Context, limit int) ([]Order, error) {
 	rows, err := s.pool.Query(ctx, `SELECT order_id, cp_order_id, account, game_id, platform_account_id,
 		amount::text, commodity, server_id, server_name, role_id, role_name, role_level, payment_status, callback_status
-		FROM orders WHERE payment_status='已支付' AND callback_status IN ('投递失败','投递中')
-		ORDER BY order_id LIMIT $1`, limit)
+		FROM orders WHERE payment_status=$1 AND callback_status IN ($2,$3)
+		ORDER BY order_id LIMIT $4`, PaymentPaid, CallbackFailed, CallbackDelivering, limit)
 	if err != nil {
 		return nil, err
 	}

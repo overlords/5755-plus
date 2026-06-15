@@ -14,8 +14,8 @@ import (
 // 仅供对账/诊断;不改 04 契约。仅在订单仍为待支付时更新(已支付订单不覆盖)。
 func (s *Store) SetOrderPaymentMethod(ctx context.Context, orderID, method string) error {
 	_, err := s.pool.Exec(ctx,
-		`UPDATE orders SET payment_method=$2 WHERE order_id=$1 AND payment_status='待支付'`,
-		orderID, method)
+		`UPDATE orders SET payment_method=$2 WHERE order_id=$1 AND payment_status=$3`,
+		orderID, method, PaymentPending)
 	return err
 }
 
