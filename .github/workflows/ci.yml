@@ -35,7 +35,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-go@v6
         with:
-          go-version: '1.26'
+          go-version: '1.26.4'
           cache-dependency-path: server/go.sum
       - name: go vet
         working-directory: server
@@ -81,3 +81,23 @@ jobs:
       - name: node --test
         working-directory: uc
         run: node --test
+
+  go-supply-chain:
+    name: server — govulncheck + mod tidy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.4'
+          cache-dependency-path: server/go.sum
+      - name: go mod tidy 无漂移
+        working-directory: server
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+      - name: govulncheck(被调用漏洞 fail-closed)
+        working-directory: server
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
