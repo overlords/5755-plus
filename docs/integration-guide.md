@@ -151,7 +151,7 @@ SDK 对外只暴露这组粗粒度码(共 7 个,平台侧的细分原因仅 SDK 
 | `NOT_INITIALIZED` | 6 | 未初始化或初始化未完成 |
 | `NETWORK_ERROR` | 7 | 网络错误 |
 | `TIMEOUT` | 8 | 请求超时 |
-| `CANCELED` | 9 | 用户取消 |
+| `CANCELED` | 9 | 玩家取消 |
 | `PARAM_ERROR` | 10 | 入参非法 |
 
 ## 5. 游戏服务端对接

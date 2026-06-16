@@ -271,7 +271,7 @@ HTTP方法(大写) + "\n"
 - **`loginMethod=password` 必须执行真实密码校验**,凭据错误返回 `reason=credential_invalid`;不允许空实现放行。`loginMethod=sms` 消费验证码,错误/过期分别返回 `sms_code_invalid` / `sms_code_expired`。
 - 维护中服务端拒绝登录,`reason=maintenance`;SDK 按维护门禁阻断,不触发账号变化。
 - 首个游戏小号属于服务端行为:新 5755 账户首次进入当前游戏时,服务端在本接口内保障首个真实游戏小号存在(`isDefault=false`),并随小号列表(2.5)返回;**小号名称由平台生成**(如"小号1"风格的递增命名),SDK 不调用任何 `create-first` 类接口,也不本地命名。
-- `channelId/channelSource` 用于 5755 账户新用户渠道归因;老用户后续登录不得覆盖既有归因。
+- `channelId/channelSource` 用于 5755 账户新账户渠道归因;老账户后续登录不得覆盖既有归因。
 - 登录失败时 SDK 必须能向调用方呈现后端 `code/message`,并依据 `reason` 区分凭据错误、账号无效、维护与平台不可用。
 
 #### 2.3.2 账户有效检查 `GET /api/sdk/v2/account-sessions`
