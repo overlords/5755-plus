@@ -19,7 +19,6 @@ import com.m5755.operate.api.Order;
 import com.m5755.operate.api.RoleInfo;
 import com.m5755.operate.api.User;
 import com.m5755.operate.api.UserListener;
-import com.m5755.operate.core.net.PlatformConfig;
 
 /**
  * 样例游戏宿主(非 SDK 范围)。操作面板驱动公开 API:init → login → 用户信息/切换/登出。
@@ -33,13 +32,6 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
-        // 验证用:intent extra baseUrl 指向本地/联调服务端;缺省走包内 assets 配置(sdk-dev)。
-        String baseUrl = getIntent().getStringExtra("baseUrl");
-        if (baseUrl != null && !baseUrl.isEmpty()) {
-            Operate.setPlatformConfigOverride(new PlatformConfig(baseUrl, "local", "local",
-                    "dev-test-key", "m5755-dev-public-test-secret-v1", "1.0.0"));
-        }
 
         Operate.setUserListener(new UserListener() {
             @Override
