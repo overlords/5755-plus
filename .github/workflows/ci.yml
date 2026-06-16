@@ -32,8 +32,8 @@ jobs:
       # 设 DATABASE_URL 才能跑 HTTP-seam 测试(否则 setup() t.Skip → 裸 go test 空过假绿,#55 第1项)
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/m5755test?sslmode=disable
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
           go-version: '1.26'
           cache-dependency-path: server/go.sum
@@ -60,12 +60,12 @@ jobs:
     name: android :sdk — 纯净门禁 + 单测 (JDK 21)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
       - name: verifyPurityGateMetaTest + verifyPublicAarPurity + :sdk:test
         working-directory: android
         run: ./gradlew --no-daemon --console=plain :sdk:verifyPurityGateMetaTest :sdk:verifyPublicAarPurity :sdk:test
@@ -74,8 +74,8 @@ jobs:
     name: uc — node test (SPA 数据层)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: '22'
       - name: node --test
