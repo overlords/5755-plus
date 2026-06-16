@@ -36,7 +36,7 @@ dependencies {
     // 01 依赖白名单:不引入 AndroidX、OkHttp、kotlin-stdlib 等;仅平台能力。
     // 运行时 org.json 用 Android 内置;JVM 单测需真实 org.json 实现(同 API)。
     testImplementation "junit:junit:4.13.2"
-    testImplementation "org.json:json:20240303"
+    testImplementation "org.json:json:20260522"
 }
 
 // 让 JVM 单测能联到本地真实平台服务端(可选):传 -DM5755_SERVER_URL=http://127.0.0.1:18080
