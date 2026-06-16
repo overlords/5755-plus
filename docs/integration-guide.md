@@ -56,7 +56,7 @@ Operate.init(activity, new Options(GAME_ID), new Listener() {
 ```java
 Operate.setUserListener(new UserListener() {
     public void onLogout() {
-        // 收敛入口:退出登录 / 切换小号 / 踢号 / 账户失效 / 小号失效
+        // 收敛入口:退出登录 / 切换账户 / 踢号 / 账户失效
         // 维护门禁、协议拒绝、防沉迷门禁阻断【不】触发此回调
     }
 });
@@ -68,27 +68,17 @@ Operate.setUserListener(new UserListener() {
 Operate.login(activity, new DataListener<User>() {
     public void onResult(boolean success, int code, String message, User user) {
         if (success) {
-            String account = user.getAccount(); // 当前游戏小号 ID
-            String token = user.getToken();     // 小号登录令牌
+            String account = user.getAccount(); // 当前账户 ID(游戏内唯一用户)
+            String token = user.getToken();     // 账户登录令牌
             // 用 account+token 到游戏服务端做登录态校验(游戏服务端校验见 §5.1)
         }
     }
 });
 ```
 
-> `User.account` 恒为**当前游戏小号 ID**,不是 5755 平台主账户 ID;SDK 不向游戏暴露平台主账户 ID。`token` 仅来自小号登录,用于服务端校验。
+> `User.account` 是**当前账户 ID = 该游戏内唯一用户**;请按 `account` 区分用户。同一玩家在本游戏可能有多个账户,每个 `account` 各算独立游戏用户。`token` 是该账户的登录令牌,仅用于游戏服务端登录态校验(§5.1)。
 
-### 3.4 设备验证(每游戏可选,默认关)
-
-设备验证是**密码登录**的可选第二因子:开启后,同一 5755 账户在**未信任的新设备**上用密码登录时,SDK 会要求额外通过一次短信验证码才放行,验过即信任该设备、此后在该设备上免验。**仅作用于密码登录**(短信验证码登录本身不涉及)。
-
-- **v2 默认关闭,按游戏开启**:默认关时密码登录就是纯密码、不增加任何短信步骤(不影响登录转化);需要更强账户保护的游戏,联系 5755 平台**为该游戏单独开启**。无全局开关,粒度落在游戏。
-- **接入方无需改码,无公开 API 变更**:开关在平台侧配置。开启后 SDK 自行携带设备标识、并在新设备上自行弹出短信验证界面;接入方不调用新方法、无新增 `OperateCode` 需处理,`login` 最终仍照常通过 `DataListener<User>` 回调成败(玩家在验证界面取消则同普通登录取消)。
-- **作用域 = 账户 × 安装,不跨游戏**:设备信任绑定「5755 账户 × 本 App 安装」。设备标识是 SDK 在本 App 私有存储内生成的**安装级随机值**(v2 不采集 OAID / Android ID 等跨 App 稳定物理设备标识),因此**卸载重装 / 清除应用数据即重置、需重新验证**;同一玩家在另一款接入游戏中按那款游戏策略独立验证,各游戏设备信任互不串用。
-
-> 默认关时,该游戏的密码登录为纯密码校验(无设备第二因子);需要新设备二次验证时,为游戏开启设备验证即可,无需改动客户端代码。
-
-### 3.5 角色上报
+### 3.4 角色上报
 
 ```java
 RoleInfo r = new RoleInfo();
@@ -106,7 +96,7 @@ Operate.sendRoleInfo(r, new Listener() {
 
 所有字段必填;确无的字段传 `"-1"`,但 `roleId` 不允许 `"-1"`(无法提供唯一角色 ID 时不调用上报)。
 
-### 3.6 支付
+### 3.5 支付
 
 ```java
 Order o = new Order();
@@ -132,12 +122,12 @@ Operate.recharge(activity, o, new Listener() {
 >
 > **`onResult` 仅用于 UI 提示与本地流程(如关闭等待框、引导重试),绝不是发货依据。** 物品发放的**唯一依据**是平台→游戏服务端的**充值回调**(§5.2)。`onResult=已交接` 也**不**代表已到账。交付 AAR 不内置任何服务端验签/发放逻辑。
 
-### 3.7 切换小号 / 退出 / 销毁
+### 3.6 切换账户 / 退出 / 销毁
 
 ```java
 Operate.changeUser(activity, new DataListener<User>() {
     public void onResult(boolean success, int code, String message, User user) {
-        // 取消切换保持当前小号(code=CANCELED)
+        // 取消切换保持当前账户(code=CANCELED)
     }
 });
 
@@ -173,13 +163,13 @@ SDK 对外只暴露这组粗粒度码(共 7 个,平台侧的细分原因仅 SDK 
 客户端 `login` 拿到的 `account`+`token`(§3.3)传到游戏服务端后,游戏服务端**必须向 5755 校验其真伪**——不能只信客户端传来的值(防伪造登录态):
 
 - **接口**:`GET /api/sdk/v2/subaccount-sessions`(生产 `https://sdk.xingninghuyu.com`,联调 `https://sdk-dev.xingninghuyu.com`)
-- **请求**:query `gameId`、`account`;header `X-M5755-Token`=玩家小号 `token`
+- **请求**:query `gameId`、`account`;header `X-M5755-Token`=玩家账户 `token`
 - **鉴权**:用 `serverKey` 按 HMAC-SHA256 + 时间戳防重放签名,三个签名头 `X-M5755-Key-Id`(=`serverKeyId`)、`X-M5755-Timestamp`、`X-M5755-Signature`(算法见 `server-facing-openapi.yaml` / 对接材料)。`serverKey` **仅可调本端点**,调其他端点返 `principal_not_allowed`(403)
 - **响应**:`data.valid=true` 才算登录态有效(HTTP 200 不等于放行);`data.account` 须与传入 `account` 一致,否则按无效处理
 
 ### 5.2 充值回调
 
-**这是发货的唯一依据。** 客户端 `recharge` 的 `onResult`(§3.6)只表示客户端流程进展、不代表到账;玩家付款成功后,5755 平台向**游戏服务端**发起充值回调,游戏服务端据此发货。
+**这是发货的唯一依据。** 客户端 `recharge` 的 `onResult`(§3.5)只表示客户端流程进展、不代表到账;玩家付款成功后,5755 平台向**游戏服务端**发起充值回调,游戏服务端据此发货。
 
 - **方向**:5755 平台服务端 → 游戏服务端(接入方把回调地址提供给 5755 平台配置)。`HTTP POST`,JSON body。
 - **回调字段**:
@@ -188,7 +178,7 @@ SDK 对外只暴露这组粗粒度码(共 7 个,平台侧的细分原因仅 SDK 
 
   | 字段 | 说明 |
   |---|---|
-  | `account` | 当前游戏小号 ID(发货归属) |
+  | `account` | 当前账户 ID(发货归属) |
   | `orderId` | 平台订单号(平台全局唯一,**幂等去重键**;下单创建响应里的同名字段) |
   | `cpOrderId` | 游戏订单号(下单时传入的 CP 订单号原样返回;**回调去重不以它为键**——去重用 `orderId`;平台对单游戏创建侧 `(gameId,cpOrderId)` 幂等、跨游戏不保证唯一) |
   | `amount` | 订单金额(元) |
@@ -217,7 +207,6 @@ SDK 对外只暴露这组粗粒度码(共 7 个,平台侧的细分原因仅 SDK 
 ## 6. 接入红线
 
 - 自动登录失败会**回退展示登录窗口**,不以失败码结束;接入方不要用本地登录态替代服务端校验放行。
-- 游戏小号一律由平台返回,**不可凭空造演示小号**;列表为空属平台侧异常。
 - 渠道异常一律回退 `default` 且不阻断登录。
 - 发货只认充值回调(§5.2),客户端任何支付状态都不作发货依据。
 - 诊断日志 tag = `M5755Sdk`。
