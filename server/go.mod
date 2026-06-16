@@ -2,6 +2,8 @@ module m5755/server
 
 go 1.26
 
+toolchain go1.26.4
+
 require (
 	github.com/gin-gonic/gin v1.10.0
 	github.com/jackc/pgx/v5 v5.6.0

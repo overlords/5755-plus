@@ -1,0 +1,35 @@
+# CodeQL 静态安全扫描。公开仓免费。本工作流只扫 Go(server);
+# Java/Android(:sdk)CodeQL 需在 runner 装 Android SDK 才能构建,成本更高,留作后续。
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '17 3 * * 1'  # 每周一 03:17 UTC 定时全扫
+
+jobs:
+  analyze:
+    name: CodeQL — Go (server)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.4'
+          cache-dependency-path: server/go.sum
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: go
+          build-mode: manual
+      - name: build
+        working-directory: server
+        run: go build ./...
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:go"

@@ -1,0 +1,19 @@
+# 依赖更新自动化(含安全更新)。三个生态:server Go 模块、GitHub Actions、Android Gradle。
+# github-actions 这条本可早发现 Node 20 弃用(#105)。
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /server
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: gradle
+    directory: /android
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
