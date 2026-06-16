@@ -39,10 +39,19 @@ jobs:
           cache-dependency-path: server/go.sum
       - name: go vet
         working-directory: server
+        # 故意只 go vet、不加 gofmt -l 门禁:中文行尾注释按显示宽度手工对齐,
+        # gofmt 按 rune 重排会致中文注释列视觉错位、损可读性。见 docs/adr/0021。
         run: go vet ./...
-      - name: go test (dev 构建,含 DB seam 全套)
+      - name: go test (dev 构建,含 DB seam 全套)+ -race + 跨包覆盖率
         working-directory: server
-        run: go test ./... -count=1
+        run: go test -race -coverpkg=./... -coverprofile=cover.out ./... -count=1
+      - name: 覆盖率汇总(可见,不设门禁)
+        working-directory: server
+        run: |
+          echo "== 跨包总覆盖率(coverpkg=./...)=="
+          go tool cover -func=cover.out | tail -1
+          echo "== 完全未覆盖函数(0.0%,前 30 行,仅供巡视)=="
+          go tool cover -func=cover.out | awk '$3=="0.0%"' | head -30 || true
       - name: go test (-tags production,生产排除子集)
         working-directory: server
         run: go test -tags production ./internal/api/ -count=1
@@ -60,3 +69,15 @@ jobs:
       - name: verifyPurityGateMetaTest + verifyPublicAarPurity + :sdk:test
         working-directory: android
         run: ./gradlew --no-daemon --console=plain :sdk:verifyPurityGateMetaTest :sdk:verifyPublicAarPurity :sdk:test
+
+  uc:
+    name: uc — node test (SPA 数据层)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: node --test
+        working-directory: uc
+        run: node --test
