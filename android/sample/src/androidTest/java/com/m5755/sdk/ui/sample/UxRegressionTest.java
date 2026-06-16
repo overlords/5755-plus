@@ -38,7 +38,7 @@ public class UxRegressionTest {
     @Test
     public void protocolDialogShowsFourProtocols() throws Exception {
         h.freshLaunch();
-        h.tapText("进入游戏(onGameStart");
+        h.tapText("进入游戏(init");
         assertTrue("init 成功", h.hasText("init 成功", TestHarness.WAIT));
         h.tapText("登录(login");
         assertTrue("应展示协议告知弹窗", h.hasText("个人信息保护引导", TestHarness.WAIT));

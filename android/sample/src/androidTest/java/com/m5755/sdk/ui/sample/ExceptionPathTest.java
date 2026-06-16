@@ -52,7 +52,7 @@ public class ExceptionPathTest {
         h.setMaintenance(true, "维护演练中");
         try {
             h.freshLaunch();
-            h.tapText("进入游戏(onGameStart");
+            h.tapText("进入游戏(init");
             assertTrue(h.hasText("init 成功", TestHarness.WAIT));
             h.tapText("登录(login");
             assertTrue("应展示维护门禁", h.hasText("维护门禁", TestHarness.WAIT));
@@ -69,7 +69,7 @@ public class ExceptionPathTest {
         h.kick(paId);
         // 重启触发自动登录 → 服务端校验失败 → 回登录窗 + 账号变化
         h.launch();
-        h.tapText("进入游戏(onGameStart");
+        h.tapText("进入游戏(init");
         assertTrue(h.hasText("init 成功", TestHarness.WAIT));
         h.tapText("登录(login");
         assertTrue("踢号后应回登录窗", h.hasText("验证码登录", TestHarness.WAIT));
@@ -99,7 +99,7 @@ public class ExceptionPathTest {
         h.antiAddiction(paId, true, true);
         // 重启 → 自动登录有效 → 实名门禁阻断 → 仅提示
         h.launch();
-        h.tapText("进入游戏(onGameStart");
+        h.tapText("进入游戏(init");
         assertTrue(h.hasText("init 成功", TestHarness.WAIT));
         h.tapText("登录(login");
         assertTrue("应展示防沉迷提示", h.hasText("防沉迷提示", TestHarness.WAIT));

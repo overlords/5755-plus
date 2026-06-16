@@ -37,12 +37,11 @@ dependencies {
 
 ## 3. 生命周期与公开 API
 
-调用顺序:`onGameStart` → `init`(成功后才允许后续业务)→ `login` → 业务(`sendRoleInfo` / `recharge` / `changeUser`)→ 退出时 `shouldQuitGame` → `destroy`。下列示例与样例工程一致。
+调用顺序:`init`(成功后才允许后续业务)→ `login` → 业务(`sendRoleInfo` / `recharge` / `changeUser`)→ 退出时 `shouldQuitGame` → `destroy`。下列示例与样例工程一致。
 
 ### 3.1 启动与初始化
 
 ```java
-Operate.onGameStart(activity);
 Operate.init(activity, new Options(GAME_ID), new Listener() {
     public void onResult(boolean success, int code, String message) {
         // success=true 后方可 login;否则按 code(见 §4)提示并允许重试
