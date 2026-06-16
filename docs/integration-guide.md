@@ -167,7 +167,7 @@ SDK 对外只暴露这组粗粒度码(共 7 个,平台侧的细分原因仅 SDK 
 
 ## 5. 游戏服务端对接
 
-游戏服务端有两件事对接 5755,都用**每游戏的 `serverKey`**(`serverKeyId + serverSecret`,5755 随接入材料下发)做 **HMAC-SHA256** 签名/验签(ADR-0016,与客户端 SDK 焊死的密钥分离;游戏服务端只学这一套签名)。机器可读契约见 `docs/server-facing-openapi.yaml`。
+游戏服务端有两件事对接 5755,都用**每游戏的 `serverKey`**(`serverKeyId + serverSecret`,5755 随接入材料下发)做 **HMAC-SHA256** 签名/验签(与客户端 SDK 内置的签名密钥相互独立,游戏服务端只用这一套签名)。机器可读契约见随接入材料下发的 `server-facing-openapi.yaml`。
 
 ### 5.1 登录态校验(serverKey)
 
@@ -193,14 +193,14 @@ SDK 对外只暴露这组粗粒度码(共 7 个,平台侧的细分原因仅 SDK 
   | `orderId` | 平台订单号(平台全局唯一,**幂等去重键**;下单创建响应里的同名字段) |
   | `cpOrderId` | 游戏订单号(下单时传入的 CP 订单号原样返回;**回调去重不以它为键**——去重用 `orderId`;平台对单游戏创建侧 `(gameId,cpOrderId)` 幂等、跨游戏不保证唯一) |
   | `amount` | 订单金额(元) |
-  | `payAmount` | 实付金额(元);v2 恒等于 `amount`(无折扣 / 券 / 余额抵扣,前向兼容缝,ADR-0012) |
+  | `payAmount` | 实付金额(元);v2 恒等于 `amount`(当前无折扣 / 券 / 余额抵扣;字段保留以备将来) |
   | `commodity` | 商品名称 |
   | `serverId` | 区服 ID |
   | `serverName` | 区服名 |
   | `serverKeyId` | 非密的密钥标识(该游戏的 `serverKeyId`);接收方据它选对应 `serverSecret` 验签 → 为优雅轮换留路(dev 联调默认 `dev-server-key`) |
   | `sign` | 平台 HMAC-SHA256 签名(口径见下「验签」;`serverSecret` 每游戏独立) |
 
-- **验签**(HMAC-SHA256,ADR-0016):游戏服务端先按回调体的 `serverKeyId` 选出对应的 `serverSecret`(单 active 密钥时即该游戏唯一密钥;轮换期据 `serverKeyId` 区分新旧),再用它复算 `sign`——取回调体除 `sign` 外**全部字段**(含 `serverKeyId`)按字段名字典序升序、逐对拼 `键=值&`(含最后一对),以 `serverSecret` 为 **HMAC 密钥**对该串做 HMAC-SHA256、十六进制小写,与回调 `sign` 比对,不过一律拒绝。`serverSecret` 是 HMAC 密钥、**不拼进串**(取代旧 MD5);`serverKeyId` 是非密标识、作为字段**进签名串**;`serverSecret` 每游戏独立、随接入材料下发(dev 联调默认 `serverKeyId=dev-server-key`、`serverSecret=m5755-dev-callback-secret-v1`)。
+- **验签**(HMAC-SHA256):游戏服务端先按回调体的 `serverKeyId` 选出对应的 `serverSecret`(单 active 密钥时即该游戏唯一密钥;轮换期据 `serverKeyId` 区分新旧),再用它复算 `sign`——取回调体除 `sign` 外**全部字段**(含 `serverKeyId`)按字段名字典序升序、逐对拼 `键=值&`(含最后一对),以 `serverSecret` 为 **HMAC 密钥**对该串做 HMAC-SHA256、十六进制小写,与回调 `sign` 比对,不过一律拒绝。`serverSecret` 是 HMAC 密钥、**不拼进串**;`serverKeyId` 是非密标识、作为字段**进签名串**;`serverSecret` 每游戏独立、随接入材料下发(dev 联调默认 `serverKeyId=dev-server-key`、`serverSecret=m5755-dev-callback-secret-v1`)。
 - **幂等去重(按 `orderId`)**:接收方**只按 `orderId` 幂等去重**(`orderId` 平台全局唯一)。**不要**用 `cpOrderId` 作去重键——平台不保证它唯一。
 - **一致性交叉校验**:回调的 `amount` 须与游戏侧订单金额一致;`cpOrderId` / `account` 须与游戏侧订单记录归属一致。三者仅作一致性交叉校验(任一不符必须失败、不得发货),**均非去重键**。
 - **无防重放窗口**:充值回调**不设**时间戳 / 防重放窗口——平台自愈巡检会重投与首发逐字节相同的陈旧但有效回调,加窗口会与自愈互斥;**按 `orderId` 幂等去重即重复投递与重放的唯一防线**。(入站登录态校验 §5.1 仍走 ±300s 时间戳窗口——出入站不对称是自愈设计的必然。)

@@ -25,7 +25,6 @@ public final class Operate {
 
     private static final ExecutorService background = Executors.newSingleThreadExecutor();
     private static UserListener userListener;
-    private static PlatformConfig configOverride;
 
     private static Storage storage;
     private static SdkUi ui;
@@ -50,14 +49,9 @@ public final class Operate {
         return userListener;
     }
 
-    /** 仅样例/测试:覆盖包内平台配置(指向本地服务端)。生产路径不调用。 */
-    public static void setPlatformConfigOverride(PlatformConfig config) {
-        configOverride = config;
-    }
-
     /** 初始化:配置拉取,成功后才允许后续业务 API(01/03)。 */
     public static void init(final Activity activity, final Options options, final Listener listener) {
-        final PlatformConfig cfg = configOverride != null ? configOverride : AssetPlatformConfig.load(activity);
+        final PlatformConfig cfg = AssetPlatformConfig.load(activity);
         android.util.Log.i("M5755Sdk", "init platformEnv=" + cfg.platformEnv
                 + " baseHost=" + cfg.baseUrl.replaceFirst("^https?://", "")
                 + " gameId=" + options.getGameId()
