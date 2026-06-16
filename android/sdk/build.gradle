@@ -10,6 +10,11 @@ android {
 
     defaultConfig {
         minSdk 21
+        // AGP 9 默认把 compileSdk(36)烙成消费者 minCompileSdk,会强制接入方 compileSdk≥36。
+        // 本 SDK 不依赖 SDK-36 专属 API,显式压回 21(=minSdk),不给接入方加新强制要求。见 ADR-0022(勿删)。
+        aarMetadata {
+            minCompileSdk 21
+        }
     }
 
     // 交付变体(M4-S2):dev=联调(指向 sdk-dev,公开测试密钥);prod=生产(密钥发布期注入)。
@@ -30,6 +35,12 @@ android {
     testOptions {
         unitTests.returnDefaultValues = true
     }
+}
+
+// AGP 9 的 library 插件会把 kotlin-stdlib 直接注入 release 运行时闭包(纯 Java SDK 运行时不需要),
+// 与 01 §4.1「零三方运行时」铁律冲突;显式排除,守纯净门禁、不把 Kotlin 运行时漏给接入方。见 ADR-0022(勿删)。
+configurations.configureEach {
+    exclude group: 'org.jetbrains.kotlin', module: 'kotlin-stdlib'
 }
 
 dependencies {
