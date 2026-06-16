@@ -79,7 +79,7 @@ public class LoginFlowTest {
 
         // 重启(不清数据)→ 自动登录 → 不弹登录窗 → 自动进入提示(#15 + 03 §2.8)
         h.launch();
-        h.tapText("进入游戏(onGameStart");
+        h.tapText("进入游戏(init");
         assertTrue(h.hasText("init 成功", TestHarness.WAIT));
         h.tapText("登录(login");
         assertTrue("已设默认应展示自动进入提示", h.hasText("将以「小号1」进入游戏", TestHarness.WAIT));

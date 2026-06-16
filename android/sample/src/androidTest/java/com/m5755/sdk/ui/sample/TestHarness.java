@@ -82,7 +82,7 @@ final class TestHarness {
 
     /** init + login 到登录窗口(全新安装:经协议同意)。 */
     void toLoginWindow() throws Exception {
-        tapText("进入游戏(onGameStart");
+        tapText("进入游戏(init");
         assertTrue("init 后应可登录", hasText("init 成功", WAIT));
         tapText("登录(login)");
         if (hasText("个人信息保护引导", 6000)) {

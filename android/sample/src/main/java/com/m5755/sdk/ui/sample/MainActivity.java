@@ -65,9 +65,8 @@ public class MainActivity extends Activity {
         status.setPadding(0, dp(8), 0, dp(8));
         root.addView(status);
 
-        addButton(root, "进入游戏(onGameStart + init)", new Runnable() {
+        addButton(root, "进入游戏(init)", new Runnable() {
             public void run() {
-                Operate.onGameStart(MainActivity.this);
                 Operate.init(MainActivity.this, new Options(GAME_ID), new Listener() {
                     public void onResult(final boolean success, int code, final String message) {
                         runOnUiThread(new Runnable() {

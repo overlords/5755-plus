@@ -60,7 +60,7 @@ type_into() { # 点中输入框(按 hint 文本)后输入
 login_flow() { # $1=phone;走 进入游戏→(协议)→登录窗→devCode→登录
   adb shell am start -n "$PKG/.MainActivity" >/dev/null
   sleep 2
-  tap_text "进入游戏(onGameStart"
+  tap_text "进入游戏(init"
   sleep 4
   if adb shell cat /sdcard/u.xml 2>/dev/null | grep -q "个人信息保护引导"; then :; fi
   tap_text "登录(login" 6

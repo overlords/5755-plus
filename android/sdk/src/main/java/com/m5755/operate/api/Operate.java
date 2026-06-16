@@ -1,7 +1,6 @@
 package com.m5755.operate.api;
 
 import android.app.Activity;
-import android.content.Context;
 
 import com.m5755.operate.core.flow.ColdStartController;
 import com.m5755.operate.core.gateway.HttpPlatformGateway;
@@ -35,10 +34,6 @@ public final class Operate {
 
     public static String getVersion() {
         return VERSION;
-    }
-
-    public static void onGameStart(Context context) {
-        android.util.Log.i("M5755Sdk", "onGameStart");
     }
 
     public static void setUserListener(UserListener listener) {

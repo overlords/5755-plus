@@ -52,7 +52,7 @@
 
 | API 面 | 保留项 |
 | --- | --- |
-| SDK 版本与启动 | `getVersion`、`onGameStart` |
+| SDK 版本 | `getVersion` |
 | 初始化 | `init`、必要 `Options` 字段 |
 | 用户监听 | `setUserListener`、`getUserListener`、`UserListener.onLogout` |
 | 登录与账号 | `login`、`isLogin`、`getUser`、`changeUser`、`logout` |
